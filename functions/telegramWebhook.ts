@@ -273,12 +273,17 @@ function mergeData(transferData, textData) {
       }
     }
     
-    if (td.recipient_name && !merged.customer_name) {
-      merged.customer_name = td.recipient_name;
+    if (td.recipient_name && !merged.receiving_account_name) {
+      merged.receiving_account_name = td.recipient_name;
     }
     
-    if (td.account_number && !merged.bank_account) {
-      merged.bank_account = td.account_number;
+    if (td.account_number) {
+      if (!merged.receiving_account_number) {
+        merged.receiving_account_number = td.account_number;
+      }
+      if (!merged.bank_account) {
+        merged.bank_account = td.account_number;
+      }
     }
     
     if (td.bank_name && !merged.bank_name) {
