@@ -1,4 +1,3 @@
-
 import { createClientFromRequest } from 'npm:@base44/sdk@0.7.1';
 
 const BOT_TOKEN = Deno.env.get("TELEGRAM_BOT_TOKEN");
@@ -407,7 +406,7 @@ Deno.serve(async (req) => {
     const textData = parseWaterSlip(messageText);
     console.log('📝 文本数据:', textData);
     
-    // 处理所有图片
+    // 处理所有图片 - 只收录不比对
     let idCardPhotoUrl = '';
     let transferReceiptUrl = '';
     let transferData = null;
@@ -423,18 +422,23 @@ Deno.serve(async (req) => {
         });
         const imageUrl = uploadResult.file_url;
         
-        // 如果是第一张图，假设是证件照
+        // 第一张图：证件照
         if (i === 0) {
           idCardPhotoUrl = imageUrl;
-          console.log('🪪 保存证件照:', imageUrl);
-        } else {
-          // 第二张图假设是转账单，进行AI识别
-          console.log('💳 分析转账单...');
+          console.log('🪪 收录证件照:', imageUrl);
+        } 
+        // 第二张图：转账单（仍需AI识别提取数据）
+        else if (i === 1) {
+          console.log('💳 分析转账单提取数据...');
           const analysis = await analyzeTransferReceipt(base44, imageBlob);
           if (analysis) {
             transferReceiptUrl = analysis.imageUrl;
             transferData = analysis;
           }
+        }
+        // 其他图片：直接收录，不做任何比对
+        else {
+          console.log(`📎 收录附加图片 ${i + 1}:`, imageUrl);
         }
       } catch (error) {
         console.error('❌ 图片处理失败:', error);
