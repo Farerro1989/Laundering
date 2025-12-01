@@ -9,6 +9,7 @@ import ExpenseDashboard from './pages/ExpenseDashboard';
 import ExpenseList from './pages/ExpenseList';
 import ExpenseCategories from './pages/ExpenseCategories';
 import ExpenseReports from './pages/ExpenseReports';
+import AccountDetail from './pages/AccountDetail';
 import __Layout from './Layout.jsx';
 
 
@@ -24,6 +25,7 @@ export const PAGES = {
     "ExpenseList": ExpenseList,
     "ExpenseCategories": ExpenseCategories,
     "ExpenseReports": ExpenseReports,
+    "AccountDetail": AccountDetail,
 }
 
 export const pagesConfig = {

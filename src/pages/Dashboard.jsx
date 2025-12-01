@@ -7,6 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { TrendingUp, DollarSign, CreditCard, Calendar, BarChartHorizontal, Coins, Calculator, Target, AlertCircle } from "lucide-react";
 import { startOfDay, endOfDay, startOfMonth, endOfMonth, isValid, isWithinInterval, startOfYear, endOfYear } from "date-fns";
+import { useNavigate } from "react-router-dom";
 
 import StatCard from "../components/dashboard/StatCard";
 import TransactionChart from "../components/dashboard/TransactionChart";
@@ -23,8 +24,9 @@ export default function Dashboard() {
   const [selectedStatus, setSelectedStatus] = useState(null);
   const [showStatusModal, setShowStatusModal] = useState(false);
   const [currentUser, setCurrentUser] = useState(null);
+        const navigate = useNavigate();
 
-  useEffect(() => {
+        useEffect(() => {
     const init = async () => {
       setLoading(true);
       try {
@@ -612,23 +614,30 @@ export default function Dashboard() {
               <div className="space-y-6">
                 {Object.entries(accountStats).map(([company, currencies]) => (
                   <div key={company} className="bg-gradient-to-br from-slate-50 to-blue-50 border border-slate-200 rounded-xl p-5 shadow-md">
-                    <div className="flex items-center gap-3 mb-4 pb-3 border-b border-slate-200">
+                    <div 
+                      className="flex items-center gap-3 mb-4 pb-3 border-b border-slate-200 cursor-pointer hover:bg-slate-100/50 rounded-lg p-2 -mx-2 transition-colors"
+                      onClick={() => navigate(`/AccountDetail?company=${encodeURIComponent(company)}`)}
+                    >
                       <div className="p-2 rounded-lg bg-gradient-to-r from-indigo-500 to-blue-500 shadow-md">
                         <CreditCard className="w-5 h-5 text-white" />
                       </div>
-                      <div>
-                        <h3 className="text-lg font-bold text-slate-900">{company}</h3>
+                      <div className="flex-1">
+                        <div className="flex items-center justify-between">
+                          <h3 className="text-lg font-bold text-slate-900">{company}</h3>
+                          <span className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded-full">点击查看详情</span>
+                        </div>
                         <p className="text-xs text-slate-600">
                           {Object.keys(currencies).length} 种币种 · 共 {Object.values(currencies).reduce((sum, cur) => sum + cur.count, 0)} 笔
                         </p>
                       </div>
                     </div>
-                    
+
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
                       {Object.entries(currencies).map(([currency, data]) => (
                         <div 
                           key={currency}
-                          className="bg-white border border-indigo-100 rounded-lg p-4 hover:shadow-md transition-shadow"
+                          className="bg-white border border-indigo-100 rounded-lg p-4 hover:shadow-md transition-shadow cursor-pointer hover:scale-[1.02] active:scale-[0.98]"
+                          onClick={() => navigate(`/AccountDetail?company=${encodeURIComponent(company)}&currency=${encodeURIComponent(currency)}`)}
                         >
                           <div className="flex items-center justify-between mb-3">
                             <div className="flex items-center gap-2">
