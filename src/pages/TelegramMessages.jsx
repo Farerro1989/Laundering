@@ -1,13 +1,17 @@
 import React, { useState, useEffect, useRef } from "react";
 import { base44 } from "@/api/base44Client";
+import { Transaction } from "@/entities/Transaction";
+import TransactionForm from "@/components/transactions/TransactionForm";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { Send, Paperclip, Search, FileText, Image as ImageIcon, User, MessageSquare, Bot } from "lucide-react";
+import { Send, Paperclip, Search, FileText, Image as ImageIcon, User, MessageSquare, Bot, Edit, PlusCircle } from "lucide-react";
 import { format } from "date-fns";
+import { toast } from "sonner";
 
 export default function TelegramMessages() {
   const [messages, setMessages] = useState([]);
