@@ -55,7 +55,44 @@ async function downloadTelegramFile(fileId) {
   }
 }
 
-// ============= 图片分析函数 =============
+// ============= 图片/文档分析函数 =============
+
+// LLM分析文档 (PDF/Word)
+async function analyzeDocument(base44, docUrl) {
+  try {
+    const result = await base44.asServiceRole.integrations.Core.InvokeLLM({
+      prompt: `请分析这份文档，提取转账水单信息。如果是水单，请提取以下字段并返回JSON：
+      - currency (币种代码,如USD, EUR)
+      - amount (金额,数字)
+      - customer_name (汇款人姓名)
+      - receiving_account_name (收款人/公司名)
+      - receiving_account_number (收款账号/IBAN)
+      - bank_name (银行名称)
+      - date (日期 YYYY-MM-DD)
+      
+      如果不是水单，返回 null。`,
+      response_json_schema: {
+        type: "object",
+        properties: {
+          currency: { type: "string" },
+          amount: { type: "number" },
+          customer_name: { type: "string" },
+          receiving_account_name: { type: "string" },
+          receiving_account_number: { type: "string" },
+          bank_name: { type: "string" },
+          date: { type: "string" }
+        }
+      },
+      file_urls: [docUrl]
+    });
+
+    if (!result || !result.amount) return null;
+    return { imageUrl: docUrl, data: result };
+  } catch (error) {
+    console.error("文档分析失败:", error);
+    return null;
+  }
+}
 
 async function analyzeTransferReceipt(base44, imageBlob) {
   try {
