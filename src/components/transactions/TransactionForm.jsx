@@ -14,7 +14,8 @@ import { Transaction } from "@/entities/Transaction";
 
 const CURRENCIES = [
   "USD美元", "EUR欧元", "SGD新元", "MYR马币", "AUD澳币", 
-  "CHF瑞郎", "THB泰铢", "VND越南盾", "GBP英镑", "CAD加元", "HKD港币", "KRW韩币"
+  "CHF瑞郎", "THB泰铢", "VND越南盾", "GBP英镑", "CAD加元", "HKD港币", "KRW韩币",
+  "CNY人民币", "JPY日元", "AED迪拉姆", "PHP菲律宾比索", "IDR印尼盾"
 ];
 
 const FUND_STATUSES = [

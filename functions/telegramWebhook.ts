@@ -172,6 +172,64 @@ async function analyzeTransferReceipt(base44, imageBlob) {
 
 // ============= 文本解析函数 =============
 
+// LLM分析文本内容 (当正则匹配失败或需要更精确提取时使用)
+async function analyzeText(base44, text) {
+  try {
+    const result = await base44.asServiceRole.integrations.Core.InvokeLLM({
+      prompt: `请仔细分析以下转账水单文本，提取关键信息并返回JSON。
+      
+      文本内容:
+      ${text}
+      
+      请提取以下字段：
+      - currency (币种代码,如USD, EUR, CNY等)
+      - amount (金额,数字)
+      - customer_name (汇款人姓名)
+      - receiving_account_name (收款人/公司名)
+      - receiving_account_number (收款账号/IBAN)
+      - bank_name (银行名称)
+      - date (日期 YYYY-MM-DD)
+      - maintenance_days (维护期天数, 数字)
+      
+      注意:
+      1. 币种请使用标准3位代码
+      2. 金额请返回纯数字
+      3. 如果没有找到某项信息，请返回null`,
+      response_json_schema: {
+        type: "object",
+        properties: {
+          currency: { type: "string" },
+          amount: { type: "number" },
+          customer_name: { type: "string" },
+          receiving_account_name: { type: "string" },
+          receiving_account_number: { type: "string" },
+          bank_name: { type: "string" },
+          date: { type: "string" },
+          maintenance_days: { type: "number" }
+        }
+      }
+    });
+    
+    if (!result) return null;
+    
+    // 简单的字段映射以匹配内部格式
+    const mapped = {};
+    if (result.amount) mapped.deposit_amount = result.amount;
+    if (result.currency) mapped.currency = result.currency;
+    if (result.customer_name) mapped.customer_name = result.customer_name;
+    if (result.receiving_account_name) mapped.receiving_account_name = result.receiving_account_name;
+    if (result.receiving_account_number) mapped.receiving_account_number = result.receiving_account_number;
+    if (result.bank_name) mapped.bank_name = result.bank_name;
+    if (result.date) mapped.deposit_date = result.date;
+    if (result.maintenance_days) mapped.maintenance_days = result.maintenance_days;
+    
+    return mapped;
+  } catch (error) {
+    console.error("文本LLM分析失败:", error);
+    return null;
+  }
+}
+
 function parseWaterSlip(text) {
   if (!text) return {};
   
@@ -221,7 +279,12 @@ function parseWaterSlip(text) {
           'VND': 'VND越南盾', '越': 'VND越南盾',
           'CAD': 'CAD加元', '加': 'CAD加元',
           'HKD': 'HKD港币', '港': 'HKD港币',
-          'KRW': 'KRW韩币', '韩': 'KRW韩币'
+          'KRW': 'KRW韩币', '韩': 'KRW韩币',
+          'CNY': 'CNY人民币', '人': 'CNY人民币',
+          'JPY': 'JPY日元', '日': 'JPY日元',
+          'AED': 'AED迪拉姆', '迪': 'AED迪拉姆',
+          'PHP': 'PHP菲律宾比索', '菲': 'PHP菲律宾比索',
+          'IDR': 'IDR印尼盾', '印': 'IDR印尼盾'
         };
         
         for (const [key, value] of Object.entries(currencyMap)) {
@@ -300,7 +363,10 @@ function mergeData(transferData, textData) {
         'EUR': 'EUR欧元', 'USD': 'USD美元', 'GBP': 'GBP英镑',
         'SGD': 'SGD新元', 'MYR': 'MYR马币', 'AUD': 'AUD澳币',
         'CHF': 'CHF瑞郎', 'THB': 'THB泰铢', 'VND': 'VND越南盾',
-        'CAD': 'CAD加元', 'HKD': 'HKD港币', 'KRW': 'KRW韩币'
+        'CAD': 'CAD加元', 'HKD': 'HKD港币', 'KRW': 'KRW韩币',
+        'CNY': 'CNY人民币', 'RMB': 'CNY人民币',
+        'JPY': 'JPY日元', 'AED': 'AED迪拉姆',
+        'PHP': 'PHP菲律宾比索', 'IDR': 'IDR印尼盾'
       };
       for (const [key, value] of Object.entries(currencyMap)) {
         if (curr.includes(key)) {
@@ -537,8 +603,22 @@ Deno.serve(async (req) => {
     // 如果是水单，发送处理中提示
     await sendTelegramMessage(chatId, '🔄 正在处理水单信息...', messageId);
     
-    // 解析文本
-    const textData = parseWaterSlip(messageText);
+    // 解析文本 (优先使用正则，如果关键信息缺失，尝试LLM分析)
+    let textData = parseWaterSlip(messageText);
+    
+    // 如果正则解析缺少关键信息且有足够文本长度，尝试LLM分析文本
+    if ((!textData.deposit_amount || !textData.currency) && messageText.length > 10) {
+      console.log('🤔 正则解析不完整，尝试LLM分析文本...');
+      const llmTextData = await analyzeText(base44, messageText);
+      if (llmTextData) {
+        console.log('🤖 LLM文本分析结果:', llmTextData);
+        // 合并LLM结果 (LLM结果优先于正则，因为更智能)
+        textData = { ...textData, ...llmTextData };
+        // 特殊处理：如果LLM返回了currency code (如CNY)，parseWaterSlip可能没处理，需要mergeData再次映射
+      }
+    }
+
+    console.log('📝 最终文本数据:', textData);
     
     // 合并数据
     const mergedData = mergeData(transferData, textData);
@@ -548,7 +628,7 @@ Deno.serve(async (req) => {
     if (!mergedData.deposit_amount || !mergedData.currency) {
       await sendTelegramMessage(
         chatId,
-        '❌ <b>信息不完整</b>\n\n缺少必要信息（金额或币种）\n\n请确保：\n1. 转账单图片/文档清晰\n2. 或在文本中提供金额和币种',
+        '❌ <b>信息不完整</b>\n\n缺少必要信息（金额或币种）\n\n请确保：\n1. 转账单图片/文档清晰\n2. 或在文本中提供金额和币种\n3. 或检查图片是否模糊',
         messageId
       );
       return new Response(JSON.stringify({ ok: true }), { status: 200 });
