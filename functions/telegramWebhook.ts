@@ -413,48 +413,19 @@ Deno.serve(async (req) => {
     console.log('📨 消息来自:', userName);
     console.log('📝 消息文本:', messageText);
     
-    // 收集所有图片
+    // 收集所有图片和文档
     const photos = [];
+    const allFileUrls = []; // 收集所有文件链接
     
     if (message.photo && message.photo.length > 0) {
       photos.push(message.photo[message.photo.length - 1].file_id);
     }
     
-    if (message.document && message.document.mime_type?.includes('image')) {
-      photos.push(message.document.file_id);
-    }
-    
-    console.log('🖼️ 发现图片数量:', photos.length);
-    
-    // 必须有图片或文本
-    if (photos.length === 0 && !messageText) {
-      console.log('⚠️ 没有可处理的内容');
-      return new Response(JSON.stringify({ ok: true }), { status: 200 });
-    }
-    
-    // 检测是否是水单信息
-    const keywords = ['汇款', '转账', '币种', '金额', '账户', '银行', 'IBAN', '查收', '收款', '维护期'];
-    const hasKeywords = keywords.some(k => messageText.toLowerCase().includes(k.toLowerCase()));
-    
-    if (photos.length === 0 && !hasKeywords) {
-      console.log('⚠️ 不是水单信息');
-      return new Response(JSON.stringify({ ok: true }), { status: 200 });
-    }
-    
-    console.log('✅ 检测到水单信息');
-    await sendTelegramMessage(chatId, '🔄 正在处理水单...\n分析转账单和保存证件照...', messageId);
-    
-    // 解析文本
-    const textData = parseWaterSlip(messageText);
-    console.log('📝 文本数据:', textData);
-    
-    // 处理所有图片 - 只收录不比对
+    // 1. 处理图片
     let idCardPhotoUrl = '';
     let transferReceiptUrl = '';
     let transferData = null;
-    const allFileUrls = []; // 收集所有文件链接用于保存消息记录
 
-    // 1. 处理图片
     for (let i = 0; i < photos.length; i++) {
       try {
         const photoId = photos[i];
@@ -468,9 +439,7 @@ Deno.serve(async (req) => {
         
         if (i === 0) {
           idCardPhotoUrl = imageUrl;
-          console.log('🪪 收录证件照:', imageUrl);
         } else if (i === 1) {
-          console.log('💳 分析转账单提取数据...');
           const analysis = await analyzeTransferReceipt(base44, imageBlob);
           if (analysis) {
             transferReceiptUrl = analysis.imageUrl;
@@ -494,18 +463,14 @@ Deno.serve(async (req) => {
         });
         const docUrl = uploadResult.file_url;
         allFileUrls.push(docUrl);
-        console.log('📎 文档已保存:', docUrl);
 
-        // 如果是PDF或图片类文档，尝试作为水单分析
+        // 尝试作为水单分析
         const mimeType = message.document.mime_type || '';
-        if (!transferData && (mimeType.includes('pdf') || mimeType.includes('image'))) {
-           // 这里简单复用analyzeTransferReceipt，虽然它主要是为图片设计的，但如果LLM支持多模态或我们有转换逻辑则可行
-           // 目前Core.InvokeLLM支持file_urls，我们可以尝试传入文档URL让LLM提取
+        if (!transferData) {
            console.log('🤖 尝试分析文档内容...');
            const analysis = await analyzeDocument(base44, docUrl);
            if (analysis) {
              transferData = analysis;
-             // 如果是文档作为水单，我们没有"图片URL"，但可以记录文档URL
              if (!transferReceiptUrl) transferReceiptUrl = docUrl;
            }
         }
@@ -516,16 +481,15 @@ Deno.serve(async (req) => {
 
     // 3. 保存消息记录 (双向同步基础)
     try {
-      // 简单的分类逻辑
       let category = 'other';
       let tags = [];
       
-      if (text) {
-        if (text.includes('汇款') || text.includes('转账') || text.includes('水单')) {
+      if (messageText) {
+        if (messageText.includes('汇款') || messageText.includes('转账') || messageText.includes('水单')) {
           category = 'transaction';
           tags.push('transaction');
         }
-        if (text.includes('你好') || text.includes('在吗')) {
+        if (messageText.includes('你好') || messageText.includes('在吗')) {
           category = 'inquiry';
           tags.push('greeting');
         }
@@ -536,14 +500,11 @@ Deno.serve(async (req) => {
         if (photos.length > 0) tags.push('photo');
       }
 
-      // 异步调用LLM进行更智能的分类（不阻塞主流程）
-      // 注意：在Serverless环境中最好await，否则可能被冻结。为了响应速度，这里用简单规则，或者快速LLM调用。
-      
       await base44.asServiceRole.entities.TelegramMessage.create({
         chat_id: String(chatId),
-        message_id: String(message.message_id),
-        sender_name: senderName,
-        content: text || (allFileUrls.length > 0 ? '[文件消息]' : '[未知消息]'),
+        message_id: String(messageId),
+        sender_name: userName,
+        content: messageText || (allFileUrls.length > 0 ? '[文件消息]' : '[未知消息]'),
         file_urls: allFileUrls,
         file_type: allFileUrls.length > 0 ? (message.document ? 'document' : 'photo') : 'text',
         direction: 'incoming',
@@ -555,6 +516,29 @@ Deno.serve(async (req) => {
     } catch (error) {
       console.error('❌ 消息存档失败:', error);
     }
+
+    // 4. 检查是否需要继续处理为交易
+    // 必须有图片或文本
+    if (photos.length === 0 && !messageText && !message.document) {
+      return new Response(JSON.stringify({ ok: true }), { status: 200 });
+    }
+    
+    // 检测是否是水单信息
+    const keywords = ['汇款', '转账', '币种', '金额', '账户', '银行', 'IBAN', '查收', '收款', '维护期'];
+    const hasKeywords = keywords.some(k => messageText.toLowerCase().includes(k.toLowerCase()));
+    
+    // 只有在明确是水单（有关键字 或 已识别出转账数据）时才继续处理为交易
+    // 如果只是普通聊天消息，则只保存消息记录即可
+    if (!hasKeywords && !transferData) {
+       console.log('ℹ️ 仅存档消息，非交易指令');
+       return new Response(JSON.stringify({ ok: true }), { status: 200 });
+    }
+
+    // 如果是水单，发送处理中提示
+    await sendTelegramMessage(chatId, '🔄 正在处理水单信息...', messageId);
+    
+    // 解析文本
+    const textData = parseWaterSlip(messageText);
     
     // 合并数据
     const mergedData = mergeData(transferData, textData);
@@ -564,7 +548,7 @@ Deno.serve(async (req) => {
     if (!mergedData.deposit_amount || !mergedData.currency) {
       await sendTelegramMessage(
         chatId,
-        '❌ <b>信息不完整</b>\n\n缺少必要信息（金额或币种）\n\n请确保：\n1. 转账单图片清晰\n2. 或在文本中提供金额和币种',
+        '❌ <b>信息不完整</b>\n\n缺少必要信息（金额或币种）\n\n请确保：\n1. 转账单图片/文档清晰\n2. 或在文本中提供金额和币种',
         messageId
       );
       return new Response(JSON.stringify({ ok: true }), { status: 200 });
@@ -583,46 +567,15 @@ Deno.serve(async (req) => {
       
       // 生成成功消息
       let successMsg = `✅ <b>水单录入成功</b>\n\n`;
-      successMsg += `━━━━━━━━━━━━━━━━━━\n`;
-      successMsg += `📋 <b>交易信息</b>\n`;
-      successMsg += `━━━━━━━━━━━━━━━━━━\n\n`;
-      
-      successMsg += `📝 编号: <code>${transaction.transaction_number}</code>\n\n`;
-      
-      if (idCardPhotoUrl) {
-        successMsg += `✓ 证件照已保存\n`;
-      }
-      if (transferReceiptUrl) {
-        successMsg += `✓ 转账单已保存\n`;
-      }
-      successMsg += `\n`;
-      
+      successMsg += `📝 编号: <code>${transaction.transaction_number}</code>\n`;
+      successMsg += `💵 金额: ${transaction.deposit_amount.toLocaleString()} ${transaction.currency}\n`;
       successMsg += `👤 汇款人: ${transaction.customer_name}\n`;
       successMsg += `🏢 入款账户: ${transaction.receiving_account_name}\n`;
-      successMsg += `💳 入款账号: ${transaction.receiving_account_number}\n`;
-      if (transaction.bank_name && transaction.bank_name !== '待完善') {
-        successMsg += `🏦 银行名称: ${transaction.bank_name}\n`;
-      }
-      if (transaction.bank_account) {
-        successMsg += `💳 AI识别账号: ${transaction.bank_account}\n`;
-      }
-      successMsg += `\n`;
-      successMsg += `💵 金额: ${transaction.deposit_amount.toLocaleString()} ${transaction.currency}\n`;
-      successMsg += `📅 汇款日期: ${transaction.deposit_date}\n`;
-      successMsg += `⏱️ 维护期: ${transaction.maintenance_days}天\n`;
-      successMsg += `📆 到期日: ${transaction.maintenance_end_date}\n`;
-      successMsg += `📊 汇率: ${transaction.exchange_rate}\n`;
-      successMsg += `💸 佣金: ${transaction.commission_percentage}%\n`;
-      successMsg += `\n`;
-      successMsg += `━━━━━━━━━━━━━━━━━━\n\n`;
-      successMsg += `📊 状态: ${transaction.fund_status}\n`;
-      successMsg += `💰 结算USDT: ${transaction.settlement_usdt.toFixed(2)}\n`;
-      successMsg += `🆔 DB ID: <code>${transaction.id}</code>\n`;
-      successMsg += `⏰ ${new Date().toLocaleString('zh-CN')}\n\n`;
+      successMsg += `📆 到期日: ${transaction.maintenance_end_date}\n\n`;
       successMsg += `✨ 已保存到系统`;
       
       await sendTelegramMessage(chatId, successMsg, messageId);
-      console.log('✅ 处理完成');
+      console.log('✅ 交易创建完成');
       
     } catch (error) {
       console.error('❌ 创建交易失败:', error);
