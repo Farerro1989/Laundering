@@ -20,7 +20,7 @@ import ProfitStats from "../components/dashboard/ProfitStats";
 export default function Dashboard() {
   const [transactions, setTransactions] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [timeFilter, setTimeFilter] = useState("month");
+  const [timeFilter, setTimeFilter] = useState("all");
   const [selectedQuarter, setSelectedQuarter] = useState("Q1");
   const [selectedYear, setSelectedYear] = useState("2025");
   const [selectedStatus, setSelectedStatus] = useState(null);

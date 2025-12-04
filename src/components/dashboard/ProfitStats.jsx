@@ -41,18 +41,18 @@ export default function ProfitStats({ profitMetrics, permissions, currentUser, t
           </div>
 
           {/* Estimated Profit */}
-          <div className="bg-gradient-to-br from-slate-50 to-gray-50 border border-slate-200 rounded-xl p-6 shadow-lg relative overflow-hidden group hover:shadow-xl transition-all">
+          <div className="bg-gradient-to-br from-indigo-50 to-blue-50 border border-indigo-200 rounded-xl p-6 shadow-lg relative overflow-hidden group hover:shadow-xl transition-all">
             <div className="relative z-10">
-              <p className="text-sm font-medium text-slate-700 mb-1">预计盈利 (全部)</p>
-              <p className="text-3xl font-bold text-slate-700">
+              <p className="text-sm font-medium text-indigo-900 mb-1">总预估盈利 (所有交易)</p>
+              <p className="text-3xl font-bold text-indigo-700">
                 {formatCurrency(profitMetrics.estimatedProfit)} USDT
               </p>
-              <p className="text-xs text-slate-500 mt-2">
-                包含进行中交易的预估收益 (共 {profitMetrics.estimatedCount} 笔)
+              <p className="text-xs text-indigo-600/70 mt-2">
+                包含进行中及已完成的所有交易 (共 {profitMetrics.estimatedCount} 笔)
               </p>
             </div>
             <div className="absolute right-0 top-0 p-6 opacity-10 group-hover:opacity-20 transition-opacity">
-              <Calculator className="w-24 h-24 text-slate-600" />
+              <Calculator className="w-24 h-24 text-indigo-600" />
             </div>
           </div>
         </div>
