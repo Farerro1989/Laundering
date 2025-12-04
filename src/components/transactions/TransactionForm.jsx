@@ -34,7 +34,7 @@ export default function TransactionForm({ transaction, initialTransferInfo = "",
     maintenance_days: 15,
     exchange_rate: 0.96,
     commission_percentage: 13.5,
-    transfer_fee: 30,
+    transfer_fee: 25,
     violation_penalty: 0,
     fund_status: "等待中",
     acceptance_usdt: 0
@@ -86,11 +86,25 @@ export default function TransactionForm({ transaction, initialTransferInfo = "",
     
     // 计算维护期到期日期
     const maintenanceEndDate = addDays(new Date(formData.deposit_date), formData.maintenance_days);
+
+    // Calculate settlement_usdt based on new logic: 
+    // Net Native = Deposit - Fee - (Deposit * Comm%)
+    // Settlement USDT = Net Native / Exchange Rate
+    const deposit = parseFloat(formData.deposit_amount) || 0;
+    const fee = parseFloat(formData.transfer_fee) || 0;
+    const commPercent = parseFloat(formData.commission_percentage) || 0;
+    const rate = parseFloat(formData.exchange_rate) || 1;
+
+    const commAmount = deposit * (commPercent / 100);
+    const netNative = deposit - fee - commAmount;
+    const settlementUsdt = rate > 0 ? (netNative / rate) : 0;
+
     const dataWithMaintenance = {
       ...formData,
-      maintenance_end_date: format(maintenanceEndDate, "yyyy-MM-dd")
+      maintenance_end_date: format(maintenanceEndDate, "yyyy-MM-dd"),
+      settlement_usdt: parseFloat(settlementUsdt.toFixed(2))
     };
-    
+
     onSubmit(dataWithMaintenance);
   };
 

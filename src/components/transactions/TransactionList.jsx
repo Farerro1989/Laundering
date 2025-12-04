@@ -1,4 +1,3 @@
-
 import React from 'react';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
@@ -92,7 +91,8 @@ export default function TransactionList({ transactions, loading, onEdit, onDelet
             <TableHead>汇款日期</TableHead>
             <TableHead>维护期</TableHead>
             <TableHead>汇率/佣金</TableHead>
-            <TableHead>结算USDT</TableHead>
+            <TableHead>结算客户U</TableHead>
+            <TableHead>承兑回U</TableHead>
             <TableHead>状态</TableHead>
             <TableHead>创建时间</TableHead>
             <TableHead>操作</TableHead>
@@ -173,8 +173,12 @@ export default function TransactionList({ transactions, loading, onEdit, onDelet
                   </div>
                 </TableCell>
 
-                <TableCell className="font-mono font-medium">
-                  {transaction.settlement_usdt?.toFixed(2)} USDT
+                <TableCell className="font-mono font-medium text-orange-600">
+                  {transaction.settlement_usdt?.toFixed(2)}
+                </TableCell>
+
+                <TableCell className="font-mono font-medium text-blue-600">
+                  {transaction.acceptance_usdt ? transaction.acceptance_usdt.toFixed(2) : '-'}
                 </TableCell>
 
                 <TableCell>

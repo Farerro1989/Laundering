@@ -153,7 +153,14 @@ export default function StatusDetailModal({ status, transactions, onClose, onUpd
                       </div>
                       
                       <div>
-                        <p className="text-sm text-slate-500">承兑回USDT</p>
+                        <p className="text-sm text-slate-500">结算给客户U</p>
+                        <p className="font-mono font-medium text-orange-600 mt-1">
+                          {(transaction.settlement_usdt || 0).toFixed(2)}
+                        </p>
+                      </div>
+
+                      <div>
+                        <p className="text-sm text-slate-500">承兑实际回U</p>
                         {isEditing ? (
                           <Input
                             type="number"
@@ -164,16 +171,9 @@ export default function StatusDetailModal({ status, transactions, onClose, onUpd
                           />
                         ) : (
                           <p className="font-mono font-medium text-blue-600 mt-1">
-                            {(transaction.acceptance_usdt || 0).toFixed(2)} USDT
+                            {(transaction.acceptance_usdt || 0).toFixed(2)}
                           </p>
                         )}
-                      </div>
-                      
-                      <div>
-                        <p className="text-sm text-slate-500">结算USDT</p>
-                        <p className="font-mono font-medium text-emerald-600 mt-1">
-                          {(transaction.settlement_usdt || 0).toFixed(2)} USDT
-                        </p>
                       </div>
                     </div>
                     

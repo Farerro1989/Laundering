@@ -180,24 +180,48 @@ export default function Dashboard() {
         continue;
       }
 
-      const initialUsdt = depositAmount / exchangeRate;
-      const commission = initialUsdt * ((parseFloat(t.commission_percentage) || 0) / 100);
-      const transferFee = parseFloat(t.transfer_fee) || 0;
-      const violationPenalty = parseFloat(t.violation_penalty) || 0;
-      
-      // Logic: Actual Profit = Deposit (Initial) - Acceptance (Cost)
-      // If Acceptance is missing, default to Projected Cost (Initial - Comm - Fee), so Profit = Comm + Fee
-      const projectedSettlement = initialUsdt - commission - transferFee;
-      const acceptanceUsdt = parseFloat(t.acceptance_usdt) > 0 ? parseFloat(t.acceptance_usdt) : projectedSettlement;
-      
-      const tradeProfit = initialUsdt - acceptanceUsdt;
-      
-      // Derived spread so that: Profit = Comm + Fee + Spread - Penalty
-      const exchangeRateProfit = tradeProfit - commission - transferFee + violationPenalty;
+      // New Logic:
+      // 1. Fee (Native) = 25 (or t.transfer_fee)
+      // 2. Comm (Native) = Deposit * %
+      // 3. Net (Native) = Deposit - Fee - Comm
+      // 4. Settlement (USDT) = Net / Rate
+      // 5. Acceptance (USDT) = Manual Input
+      // 6. Profit = Acceptance - Settlement
 
-      totalCommission += commission;
-      totalTransferFee += transferFee;
-      totalExchangeRateProfit += exchangeRateProfit;
+      const feeNative = parseFloat(t.transfer_fee) || 0;
+      const commNative = depositAmount * ((parseFloat(t.commission_percentage) || 0) / 100);
+      const netNative = depositAmount - feeNative - commNative;
+      const settlementUsdt = netNative / exchangeRate;
+      
+      const acceptanceUsdt = parseFloat(t.acceptance_usdt) || 0;
+      const violationPenalty = parseFloat(t.violation_penalty) || 0;
+
+      // To calculate components in USDT for display:
+      const commissionUsdt = commNative / exchangeRate;
+      const feeUsdt = feeNative / exchangeRate;
+
+      // If acceptance is 0 (not entered), assume break-even (profit = commission + fee)
+      // i.e. effectively Acceptance = Settlement + Comm + Fee? No.
+      // If not entered, we can't calculate real profit. We will use 0 for acceptance.
+      // But to avoid massive negative numbers in "Actual Profit" if user hasn't entered data,
+      // we might want to use settlementUsdt as a fallback for Acceptance? 
+      // No, let's stick to strict logic. If no acceptance, then profit is negative (we paid client but got nothing?). 
+      // Wait, usually "Completed" means we have the money.
+      // Let's use settlementUsdt as fallback for Acceptance if 0, so profit is 0.
+      const actualAcceptance = acceptanceUsdt > 0 ? acceptanceUsdt : settlementUsdt;
+
+      // Profit = Acceptance - Settlement - Penalty
+      // (User formula said "Total Profit = Comm + Fee + ExchangeProfit", but ExchangeProfit = Acceptance - Settlement)
+      // We will use Acceptance - Settlement as the Total Profit because that is the physical money remaining.
+      const totalTradeProfit = actualAcceptance - settlementUsdt - violationPenalty;
+
+      totalCommission += commissionUsdt;
+      totalTransferFee += feeUsdt;
+      // We'll store the "Spread" part as Total - Comm - Fee, just for the breakdown chart if needed.
+      // Spread = Total - Comm - Fee
+      const spread = totalTradeProfit - commissionUsdt - feeUsdt; 
+      totalExchangeRateProfit += spread; 
+      
       totalViolationPenalty += violationPenalty;
       completedCount++;
     }
@@ -218,20 +242,35 @@ export default function Dashboard() {
         continue;
       }
 
-      const initialUsdt = depositAmount / exchangeRate;
-      const commission = initialUsdt * ((parseFloat(t.commission_percentage) || 0) / 100);
-      const transferFee = parseFloat(t.transfer_fee) || 0;
+      const feeNative = parseFloat(t.transfer_fee) || 0;
+      const commNative = depositAmount * ((parseFloat(t.commission_percentage) || 0) / 100);
+      const netNative = depositAmount - feeNative - commNative;
+      const settlementUsdt = netNative / exchangeRate;
+      
+      const acceptanceUsdt = parseFloat(t.acceptance_usdt) || 0;
       const violationPenalty = parseFloat(t.violation_penalty) || 0;
-      
-      const projectedSettlement = initialUsdt - commission - transferFee;
-      const acceptanceUsdt = parseFloat(t.acceptance_usdt) > 0 ? parseFloat(t.acceptance_usdt) : projectedSettlement;
-      
-      const tradeProfit = initialUsdt - acceptanceUsdt;
-      const exchangeRateProfit = tradeProfit - commission - transferFee + violationPenalty;
 
-      estimatedCommission += commission;
-      estimatedTransferFee += transferFee;
-      estimatedExchangeRateProfit += exchangeRateProfit;
+      const commissionUsdt = commNative / exchangeRate;
+      const feeUsdt = feeNative / exchangeRate;
+
+      // For estimation, if acceptance is 0, we assume we get the full value of deposit converted at market rate?
+      // Or we assume we get enough to cover settlement?
+      // Let's assume Acceptance = Settlement + Comm + Fee (i.e. the Spread is 0) if not entered.
+      // Or assume Acceptance = Deposit / ExchangeRate (Market)?
+      // Since we don't have a separate market rate, we can't estimate spread.
+      // So we assume Spread is 0.
+      // Thus Acceptance = Settlement + Comm + Fee.
+      // So Profit = Comm + Fee.
+      
+      const estimatedAcceptance = acceptanceUsdt > 0 ? acceptanceUsdt : (settlementUsdt + commissionUsdt + feeUsdt);
+      
+      const totalTradeProfit = estimatedAcceptance - settlementUsdt - violationPenalty;
+      
+      const spread = totalTradeProfit - commissionUsdt - feeUsdt;
+
+      estimatedCommission += commissionUsdt;
+      estimatedTransferFee += feeUsdt;
+      estimatedExchangeRateProfit += spread;
       estimatedViolationPenalty += violationPenalty;
       estimatedCount++;
     }
