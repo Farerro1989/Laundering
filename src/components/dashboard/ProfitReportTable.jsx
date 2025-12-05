@@ -68,8 +68,12 @@ export default function ProfitReportTable({ transactions }) {
         const netNative = depositAmount - feeNative - commNative;
         const settlementUsdt = netNative / exchangeRate;
         const actualAcceptance = acceptanceUsdt > 0 ? acceptanceUsdt : settlementUsdt;
-        const totalTradeProfit = actualAcceptance - settlementUsdt - violationPenalty;
-        const spread = totalTradeProfit - commissionUsdt - feeUsdt;
+        
+        // Exchange Rate Profit = Acceptance - Initial USDT
+        const spread = actualAcceptance - initialUsdt;
+        
+        // Total Profit = Spread + Comm + Fee - Penalty
+        const totalTradeProfit = spread + commissionUsdt + feeUsdt - violationPenalty;
 
         // Aggregate
         groupedData[key].count += 1;

@@ -47,8 +47,13 @@ export default function ProfitChart({ transactions, loading }) {
           // 计算各项收入
           const initialUsdt = transaction.deposit_amount / transaction.exchange_rate;
           const commission = initialUsdt * ((transaction.commission_percentage || 0) / 100);
-          const transferFee = transaction.transfer_fee || 0;
-          const exchangeRateProfit = (transaction.acceptance_usdt || 0) - initialUsdt;
+          // 手续费需要除以汇率转为USDT (假设transfer_fee是原币种)
+          const transferFee = (transaction.transfer_fee || 0) / transaction.exchange_rate;
+          
+          // 汇率差盈利 = 承兑回USDT - 初始USDT
+          const acceptanceUsdt = transaction.acceptance_usdt || 0;
+          const exchangeRateProfit = acceptanceUsdt > 0 ? (acceptanceUsdt - initialUsdt) : 0;
+          
           const violationPenalty = transaction.violation_penalty || 0;
           
           const totalProfit = commission + transferFee + exchangeRateProfit - violationPenalty;
