@@ -221,16 +221,10 @@ export default function Dashboard() {
 
       totalCommission += commissionUsdt;
       totalTransferFee += feeUsdt;
-      // Exchange Rate Profit = Acceptance - Initial USDT
-      // (User specified formula: 承兑回USDT - 初始USDT)
+      // Exchange Profit = Acceptance - Initial USDT
       const initialUsdt = depositAmount / exchangeRate;
-      const spread = actualAcceptance - initialUsdt;
-      
-      // Recalculate Total Profit to ensure consistency:
-      // Total = Spread + Comm + Fee - Penalty
-      // This should mathematically equal (Acceptance - Settlement - Penalty) if (Settlement = Initial - Comm - Fee)
-      
-      totalExchangeRateProfit += spread; 
+      const exchangeProfit = actualAcceptance - initialUsdt;
+      totalExchangeRateProfit += exchangeProfit; 
       
       totalViolationPenalty += violationPenalty;
       completedCount++;
@@ -274,13 +268,13 @@ export default function Dashboard() {
       
       const estimatedAcceptance = acceptanceUsdt > 0 ? acceptanceUsdt : (settlementUsdt + commissionUsdt + feeUsdt);
       
+      // Exchange Profit = Acceptance - Initial USDT
       const initialUsdt = depositAmount / exchangeRate;
-      // If acceptance is not present (using estimated), spread should be 0 (as estimatedAcceptance = Initial)
-      const spread = estimatedAcceptance - initialUsdt;
+      const estimatedExchangeProfit = estimatedAcceptance - initialUsdt;
 
       estimatedCommission += commissionUsdt;
       estimatedTransferFee += feeUsdt;
-      estimatedExchangeRateProfit += spread;
+      estimatedExchangeRateProfit += estimatedExchangeProfit;
       estimatedViolationPenalty += violationPenalty;
       estimatedCount++;
     }
