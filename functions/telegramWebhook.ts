@@ -215,36 +215,41 @@ function parseWaterSlip(text) {
   
   const data = {};
   const lines = text.split('\n');
+  const currentYear = new Date().getFullYear();
   
   for (const line of lines) {
     const trimmed = line.trim();
     if (!trimmed) continue;
     
-    // 汇款日期
-    if (/(汇款日期|日期)/i.test(trimmed)) {
-      const match = trimmed.match(/(?:汇款日期|日期)[：:：]\s*(\d{4}[-/]\d{1,2}[-/]\d{1,2})/);
+    // 1. 汇款日期 (支持空格，支持MM-DD自动补年份)
+    if (/(?:汇款\s*日期|日期)\s*[：:：=]/.test(trimmed)) {
+      // 匹配完整日期 YYYY-MM-DD
+      let match = trimmed.match(/(?:汇款\s*日期|日期)\s*[：:：=]\s*(\d{4}[-/]\d{1,2}[-/]\d{1,2})/);
       if (match) {
-        try {
-          const dateStr = match[1].replace(/\//g, '-');
-          const parts = dateStr.split('-');
-          data.deposit_date = `${parts[0]}-${parts[1].padStart(2, '0')}-${parts[2].padStart(2, '0')}`;
-        } catch (e) {
-          console.error('日期解析失败:', e);
+        data.deposit_date = match[1].replace(/\//g, '-');
+      } else {
+        // 匹配简写日期 MM-DD 或 M-D
+        match = trimmed.match(/(?:汇款\s*日期|日期)\s*[：:：=]\s*(\d{1,2}[-/]\d{1,2})/);
+        if (match) {
+          data.deposit_date = `${currentYear}-${match[1].replace(/\//g, '-')}`;
+          // 格式化月日，确保是MM-DD
+          const parts = data.deposit_date.split('-');
+          if (parts.length === 3) {
+            data.deposit_date = `${parts[0]}-${parts[1].padStart(2, '0')}-${parts[2].padStart(2, '0')}`;
+          }
         }
       }
     }
     
-    // 维护期
-    else if (/维护期/i.test(trimmed)) {
-      const match = trimmed.match(/维护期[：:：]\s*(\d+)/);
-      if (match) {
-        data.maintenance_days = parseInt(match[1]);
-      }
+    // 2. 维护期
+    else if (/维护期\s*(?:（天数）)?\s*[：:：=]/.test(trimmed)) {
+      const match = trimmed.match(/维护期.*?[：:：=]\s*(\d+)/);
+      if (match) data.maintenance_days = parseInt(match[1]);
     }
     
-    // 查收币种/币种
-    else if (/(查收币种|币种)/i.test(trimmed)) {
-      const match = trimmed.match(/(?:查收币种|币种)[：:：]\s*([A-Z]{3}|[\u4e00-\u9fa5]+)/i);
+    // 3. 查收币种/入金币种
+    else if (/(?:查收\s*币种|入金\s*币种|币种)\s*[：:：=]/.test(trimmed)) {
+      const match = trimmed.match(/(?:查收\s*币种|入金\s*币种|币种)\s*[：:：=]\s*([A-Z]{3}|[\u4e00-\u9fa5]+)/i);
       if (match) {
         const curr = match[1].toUpperCase();
         const currencyMap = {
@@ -266,7 +271,6 @@ function parseWaterSlip(text) {
           'PHP': 'PHP菲律宾比索', '菲': 'PHP菲律宾比索',
           'IDR': 'IDR印尼盾', '印': 'IDR印尼盾'
         };
-        
         for (const [key, value] of Object.entries(currencyMap)) {
           if (curr.includes(key)) {
             data.currency = value;
@@ -276,48 +280,66 @@ function parseWaterSlip(text) {
       }
     }
     
-    // 汇款人姓名
-    else if (/(汇款人姓名|汇款人|姓名)/i.test(trimmed) && !/账户|账号/i.test(trimmed)) {
-      const match = trimmed.match(/(?:汇款人姓名|汇款人|姓名)[：:：]\s*(.+)/i);
-      if (match) {
-        data.customer_name = match[1].trim();
-      }
+    // 4. 汇款人姓名
+    else if (/(?:汇款人\s*姓名|汇款人|客户\s*姓名)\s*[：:：=]/.test(trimmed)) {
+      const match = trimmed.match(/(?:汇款人\s*姓名|汇款人|客户\s*姓名).*?[：:：=]\s*(.+)/);
+      if (match) data.customer_name = match[1].trim();
     }
     
-    // 入款账户名
-    else if (/入款账户名/i.test(trimmed)) {
-      const match = trimmed.match(/入款账户名[：:：]\s*(.+)/i);
-      if (match) {
-        data.receiving_account_name = match[1].trim();
-      }
+    // 5. 收款账户名/入款账户名
+    else if (/(?:收款\s*账户名|公司\s*入款\s*账户名|入款\s*公司名|入款\s*账户名)\s*[：:：=]/.test(trimmed)) {
+      const match = trimmed.match(/(?:收款\s*账户名|公司\s*入款\s*账户名|入款\s*公司名|入款\s*账户名).*?[：:：=]\s*(.+)/);
+      if (match) data.receiving_account_name = match[1].trim();
     }
     
-    // 入款账户号
-    else if (/入款账户号/i.test(trimmed)) {
-      const match = trimmed.match(/入款账户号[：:：]\s*([A-Z0-9\s]+)/i);
-      if (match) {
-        data.receiving_account_number = match[1].trim();
-      }
+    // 6. 收款账户/入款账户号
+    else if (/(?:收款\s*账户|入款\s*账户号|收款\s*公司\s*账号|入款\s*账号)\s*[：:：=]/.test(trimmed)) {
+      const match = trimmed.match(/(?:收款\s*账户|入款\s*账户号|收款\s*公司\s*账号|入款\s*账号).*?[：:：=]\s*([A-Z0-9\s]+)/i);
+      if (match) data.receiving_account_number = match[1].trim();
     }
     
-    // 银行名称 (from text, separate from AI's bank_name)
-    else if (/银行名称/i.test(trimmed)) {
-      const match = trimmed.match(/银行名称[：:：]\s*(.+)/i);
+    // 7. 查收金额
+    else if (/(?:查收\s*金额|金额)\s*[：:：=]/.test(trimmed)) {
+      const match = trimmed.match(/(?:查收\s*金额|金额)\s*[：:：=]\s*([\d,.\s]+)/);
       if (match) {
-        data.bank_name = match[1].trim();
+        const amount = parseFloat(match[1].replace(/[,\s]/g, ''));
+        if (!isNaN(amount)) data.deposit_amount = amount;
       }
     }
-    
-    // 查收金额
-    else if (/(查收金额|金额)/i.test(trimmed)) {
-      const match = trimmed.match(/(?:查收金额|金额)[：:：]\s*([\d,.\s]+)/i);
-      if (match) {
-        const amountStr = match[1].replace(/[,\s]/g, '');
-        const amount = parseFloat(amountStr);
-        if (!isNaN(amount) && amount > 0) {
-          data.deposit_amount = amount;
-        }
-      }
+
+    // 8. 汇款笔数
+    else if (/(?:汇款\s*笔数|笔数)\s*[：:：=]/.test(trimmed)) {
+      const match = trimmed.match(/(?:汇款\s*笔数|笔数)\s*[：:：=]\s*(\d+)/);
+      if (match) data.remittance_count = parseInt(match[1]);
+    }
+
+    // 9. 国籍
+    else if (/国籍\s*[：:：=]/.test(trimmed)) {
+      const match = trimmed.match(/国籍\s*[：:：=]\s*(.+)/);
+      if (match) data.customer_nationality = match[1].trim();
+    }
+
+    // 10. 年龄
+    else if (/(?:年龄|年齡)\s*[：:：=]/.test(trimmed)) {
+      const match = trimmed.match(/(?:年龄|年齡)\s*[：:：=]\s*(\d+)/);
+      if (match) data.customer_age = parseInt(match[1]);
+    }
+
+    // 11. 汇率
+    else if (/汇率\s*[：:：=]/.test(trimmed)) {
+      const match = trimmed.match(/汇率\s*[：:：=]\s*([\d.]+)/);
+      if (match) data.exchange_rate = parseFloat(match[1]);
+    }
+
+    // 12. 点位 (支持 "点位（包含加点）:13%")
+    else if (/(?:点位|佣金).*?[：:：=]/.test(trimmed)) {
+      const match = trimmed.match(/(?:点位|佣金).*?[：:：=]\s*([\d.]+)/);
+      if (match) data.commission_percentage = parseFloat(match[1]);
+    }
+
+    // 13. 进算/拖算 (单独一行或包含在行内)
+    if (/(?:进算|拖算)/.test(trimmed)) {
+      data.calculation_mode = trimmed.includes('拖算') ? '拖算' : '进算';
     }
   }
   
@@ -611,12 +633,7 @@ Deno.serve(async (req) => {
     let textData = parseWaterSlip(messageText);
     
     // 如果正则解析缺少关键信息且有足够文本长度，尝试LLM分析文本
-    // 尝试解析文本中的新字段（国籍、笔数、计算方式）
-    if (/国籍[：:：]\s*(.+)/.test(messageText)) textData.customer_nationality = messageText.match(/国籍[：:：]\s*(.+)/)[1].trim();
-    if (/(?:汇款笔数|笔数)[：:：]\s*(\d+)/.test(messageText)) textData.remittance_count = parseInt(messageText.match(/(?:汇款笔数|笔数)[：:：]\s*(\d+)/)[1]);
-    if (/(?:进算|拖算)/.test(messageText)) {
-      textData.calculation_mode = messageText.includes('拖算') ? '拖算' : '进算';
-    }
+    // 注：新的parseWaterSlip已经涵盖了大部分字段解析，这里保留LLM作为兜底
 
     if ((!textData.deposit_amount || !textData.currency) && messageText.length > 10) {
       console.log('🤔 正则解析不完整，尝试LLM分析文本...');
