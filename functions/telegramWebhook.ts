@@ -94,78 +94,56 @@ async function analyzeDocument(base44, docUrl) {
   }
 }
 
-async function analyzeTransferReceipt(base44, imageBlob) {
+// 智能图片内容分析 (支持水单和证件)
+async function analyzeImageContent(base44, imageUrl) {
   try {
-    console.log('🔍 开始分析转账单...');
+    console.log('🔍 开始智能分析图片内容...', imageUrl);
     
-    const uploadResult = await base44.asServiceRole.integrations.Core.UploadFile({
-      file: imageBlob
-    });
-    
-    const imageUrl = uploadResult.file_url;
-    console.log('📎 图片URL:', imageUrl);
-    
-    // 使用更详细的提示词来识别转账单信息
-    const transferData = await base44.asServiceRole.integrations.Core.InvokeLLM({
-      prompt: `请仔细分析这张银行转账单截图，提取以下关键信息。
+    const result = await base44.asServiceRole.integrations.Core.InvokeLLM({
+      prompt: `请分析这张图片的内容。判断它是"证件照片"(id_card)还是"银行转账单"(transfer_receipt)。
 
-【必须提取的信息】
-1. 转账金额 (amount) - 纯数字，不包含货币符号，例如：5000、10000.50
-2. 币种 (currency) - 货币代码，例如：EUR、USD、GBP、SGD等
-3. 收款人姓名 (recipient_name) - 完整的收款人名称
+如果是【证件照片】(如护照、身份证、驾照)：
+- 提取姓名 (name)
+- 提取年龄 (age) - 如果有出生日期，请计算当前年龄（整数）
 
-【尽量提取的信息】
-4. 收款账号 (account_number) - IBAN或银行账号
-5. 银行名称 (bank_name) - 收款银行的名称
-6. 转账日期 (transfer_date) - 格式：YYYY-MM-DD
+如果是【银行转账单】：
+- 提取转账金额 (amount) - 纯数字
+- 提取币种 (currency) - 3位代码
+- 提取收款人姓名 (recipient_name)
+- 提取收款账号 (account_number)
+- 提取银行名称 (bank_name)
+- 提取转账日期 (transfer_date) - YYYY-MM-DD
 
-【注意事项】
-- 转账金额必须准确无误
-- 如果图片中有多个金额，选择"实际转账金额"或"到账金额"
-- 币种要使用标准的3字母代码（如EUR、USD）
-- 收款人姓名要完整，不要截断
-- 如果某项信息无法确定，返回null
-- 不要猜测或捏造信息
-
-请返回JSON格式的数据。`,
+请返回JSON格式数据。`,
       file_urls: [imageUrl],
       response_json_schema: {
         type: "object",
         properties: {
-          amount: { 
-            type: "number",
-            description: "转账金额（纯数字）"
+          image_type: { 
+            type: "string", 
+            enum: ["id_card", "transfer_receipt", "other"],
+            description: "图片类型"
           },
-          currency: { 
-            type: "string",
-            description: "币种代码（EUR/USD/GBP等）"
-          },
-          recipient_name: { 
-            type: "string",
-            description: "收款人完整姓名"
-          },
-          account_number: { 
-            type: "string",
-            description: "收款账号或IBAN"
-          },
-          bank_name: { 
-            type: "string",
-            description: "收款银行名称"
-          },
-          transfer_date: { 
-            type: "string",
-            description: "转账日期 YYYY-MM-DD"
-          }
+          // 证件字段
+          name: { type: "string", description: "证件姓名" },
+          age: { type: "number", description: "年龄" },
+          // 水单字段
+          amount: { type: "number" },
+          currency: { type: "string" },
+          recipient_name: { type: "string" },
+          account_number: { type: "string" },
+          bank_name: { type: "string" },
+          transfer_date: { type: "string" }
         },
-        required: ["amount", "currency"]
+        required: ["image_type"]
       }
     });
     
-    console.log('✅ 转账单识别结果:', transferData);
-    return { imageUrl, data: transferData };
+    console.log('✅ 图片智能分析结果:', result);
+    return { imageUrl, data: result };
     
   } catch (error) {
-    console.error('❌ 转账单分析失败:', error);
+    console.error('❌ 图片分析失败:', error);
     return null;
   }
 }
@@ -420,6 +398,7 @@ async function createTransaction(base44, data, chatId, messageId, idCardPhotoUrl
   const transaction = {
     transaction_number: numberResponse.data.transaction_number,
     customer_name: data.customer_name || '待完善',
+    customer_age: data.customer_age || null,
     receiving_account_name: data.receiving_account_name || '待完善',
     receiving_account_number: data.receiving_account_number || '待完善',
     bank_name: data.bank_name || '', // This is for AI-identified bank name or text-parsed '银行名称'
@@ -491,6 +470,8 @@ Deno.serve(async (req) => {
     let idCardPhotoUrl = '';
     let transferReceiptUrl = '';
     let transferData = null;
+    let extractedCustomerName = '';
+    let extractedAge = null;
 
     for (let i = 0; i < photos.length; i++) {
       try {
@@ -503,13 +484,29 @@ Deno.serve(async (req) => {
         const imageUrl = uploadResult.file_url;
         allFileUrls.push(imageUrl);
         
-        if (i === 0) {
-          idCardPhotoUrl = imageUrl;
-        } else if (i === 1) {
-          const analysis = await analyzeTransferReceipt(base44, imageBlob);
-          if (analysis) {
-            transferReceiptUrl = analysis.imageUrl;
-            transferData = analysis;
+        // 智能分析图片内容 (区分证件或水单)
+        const analysis = await analyzeImageContent(base44, imageUrl);
+        
+        if (analysis && analysis.data) {
+          const type = analysis.data.image_type;
+          console.log(`🖼️ 图片识别为: ${type}`);
+          
+          if (type === 'id_card') {
+            idCardPhotoUrl = imageUrl;
+            if (analysis.data.name) extractedCustomerName = analysis.data.name;
+            if (analysis.data.age) extractedAge = analysis.data.age;
+          } else if (type === 'transfer_receipt') {
+            transferReceiptUrl = imageUrl;
+            // 如果已经有transferData，可能保留第一个或合并，这里简单保留
+            if (!transferData) {
+               transferData = { imageUrl, data: analysis.data };
+            }
+          } else {
+             // 默认为水单处理，防止漏判
+             if (!transferData) {
+               transferData = { imageUrl, data: analysis.data };
+               transferReceiptUrl = imageUrl;
+             }
           }
         }
       } catch (error) {
@@ -622,6 +619,15 @@ Deno.serve(async (req) => {
     
     // 合并数据
     const mergedData = mergeData(transferData, textData);
+    
+    // 注入证件提取的信息
+    if (extractedCustomerName) {
+      mergedData.customer_name = extractedCustomerName;
+    }
+    if (extractedAge) {
+      mergedData.customer_age = extractedAge;
+    }
+    
     console.log('📊 合并后数据:', mergedData);
     
     // 验证必要字段
@@ -649,7 +655,9 @@ Deno.serve(async (req) => {
       let successMsg = `✅ <b>水单录入成功</b>\n\n`;
       successMsg += `📝 编号: <code>${transaction.transaction_number}</code>\n`;
       successMsg += `💵 金额: ${transaction.deposit_amount.toLocaleString()} ${transaction.currency}\n`;
-      successMsg += `👤 汇款人: ${transaction.customer_name}\n`;
+      successMsg += `👤 汇款人: ${transaction.customer_name}`;
+      if (transaction.customer_age) successMsg += ` (${transaction.customer_age}岁)`;
+      successMsg += `\n`;
       successMsg += `🏢 入款账户: ${transaction.receiving_account_name}\n`;
       successMsg += `📆 到期日: ${transaction.maintenance_end_date}\n\n`;
       successMsg += `✨ 已保存到系统`;
