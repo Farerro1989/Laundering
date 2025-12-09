@@ -673,15 +673,21 @@ Deno.serve(async (req) => {
       );
       
       // 生成成功消息
-      let successMsg = `✅ <b>水单录入成功</b>\n\n`;
+      let successMsg = `✅ <b>水单录入成功，请核对信息</b>\n\n`;
       successMsg += `📝 编号: <code>${transaction.transaction_number}</code>\n`;
-      successMsg += `💵 金额: ${transaction.deposit_amount.toLocaleString()} ${transaction.currency}\n`;
+      successMsg += `💵 查收金额: ${transaction.deposit_amount.toLocaleString()} ${transaction.currency}\n`;
+      successMsg += `🔢 汇款笔数: ${transaction.remittance_count || 1}笔\n`;
       successMsg += `👤 汇款人: ${transaction.customer_name}`;
       if (transaction.customer_age) successMsg += ` (${transaction.customer_age}岁)`;
+      if (transaction.customer_nationality) successMsg += ` [${transaction.customer_nationality}]`;
       successMsg += `\n`;
-      successMsg += `🏢 入款账户: ${transaction.receiving_account_name}\n`;
-      successMsg += `📆 到期日: ${transaction.maintenance_end_date}\n\n`;
-      successMsg += `✨ 已保存到系统`;
+      successMsg += `🏢 收款账户名: ${transaction.receiving_account_name}\n`;
+      successMsg += `💳 收款账号: ${transaction.receiving_account_number}\n`;
+      successMsg += `💱 汇率: ${transaction.exchange_rate}\n`;
+      successMsg += `📊 点位: ${transaction.commission_percentage}% (${transaction.calculation_mode || '进算'})\n`;
+      successMsg += `📆 汇款日期: ${transaction.deposit_date}\n`;
+      successMsg += `⏳ 维护期: ${transaction.maintenance_days}天 (到期: ${transaction.maintenance_end_date})\n\n`;
+      successMsg += `✨ 如有误请在后台修改`;
       
       await sendTelegramMessage(chatId, successMsg, messageId);
       console.log('✅ 交易创建完成');
