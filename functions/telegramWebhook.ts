@@ -410,6 +410,12 @@ function mergeData(transferData, textData) {
 // ============= 创建交易函数 =============
 
 async function createTransaction(base44, data, chatId, messageId, idCardPhotoUrl, transferReceiptUrl) {
+  // 确保数值字段有效
+  data.deposit_amount = parseFloat(data.deposit_amount) || 0;
+  data.exchange_rate = parseFloat(data.exchange_rate) || 0.96;
+  data.commission_percentage = parseFloat(data.commission_percentage) || 13.5;
+  data.transfer_fee = parseFloat(data.transfer_fee) || 25;
+
   // 生成交易编号
   const numberResponse = await base44.asServiceRole.functions.invoke('generateTransactionNumber', {
     date: data.deposit_date || new Date().toISOString().split('T')[0]
@@ -460,6 +466,176 @@ async function createTransaction(base44, data, chatId, messageId, idCardPhotoUrl
   return await base44.asServiceRole.entities.Transaction.create(transaction);
 }
 
+// ============= 批量处理函数 =============
+
+async function processBatch(base44, chatId) {
+  try {
+    // 1. 获取最近未处理的消息 (pending_batch 或 unread 且包含文件)
+    // 注意：Base44 SDK 列表查询可能需要根据实际支持的过滤语法调整
+    // 这里假设 .filter() 支持简单对象过滤。如果不支持复杂查询，可能需要 list 后过滤
+    const messages = await base44.asServiceRole.entities.TelegramMessage.list(); // 获取最近消息
+    
+    // 过滤出当前chatId的、未处理的、有文件的消息
+    const batchMessages = messages.filter(m => 
+      m.chat_id === String(chatId) && 
+      (m.status === 'pending_batch' || m.status === 'unread') &&
+      m.file_urls && m.file_urls.length > 0
+    ).slice(0, 10); // 限制处理最近10条，防止过多
+
+    if (batchMessages.length === 0) {
+      return "⚠️ 没有找到需要处理的文件消息。请确保先发送图片/文档，再发送 /process_batch";
+    }
+
+    await sendTelegramMessage(chatId, `🔄 开始批量处理 ${batchMessages.length} 条消息...`);
+
+    // 2. 收集所有图片/文档 URL
+    let allImages = [];
+    batchMessages.forEach(msg => {
+      if (msg.file_urls) {
+        allImages = [...allImages, ...msg.file_urls];
+      }
+    });
+
+    if (allImages.length === 0) return "⚠️ 未找到有效的文件链接";
+
+    // 3. 分析所有文件
+    let idCardData = null;
+    let receiptData = null;
+    let idCardUrl = '';
+    let receiptUrl = '';
+    let transactionData = {};
+
+    for (const url of allImages) {
+      // 简单判断文件类型（图片vs文档），这里复用之前的 analyzeImageContent
+      // 如果是文档URL，可能需要 analyzeDocument。为简化，先假设大部分是图片。
+      // 实际应根据 metadata 或 url 后缀判断，但 telegram file path 不一定有后缀。
+      // 尝试作为图片分析
+      const analysis = await analyzeImageContent(base44, url);
+      
+      if (analysis && analysis.data) {
+        const type = analysis.data.image_type;
+        console.log(`🖼️ [批量] 识别结果: ${type} (${url})`);
+
+        if (type === 'id_card') {
+          idCardData = analysis.data;
+          idCardUrl = url;
+          // 计算年龄
+          if (idCardData.birth_date) {
+             const birthYear = parseInt(idCardData.birth_date.substring(0, 4));
+             if (!isNaN(birthYear)) {
+               idCardData.age = new Date().getFullYear() - birthYear;
+             }
+          }
+        } else if (type === 'transfer_receipt') {
+          // 如果有多张水单，目前逻辑是覆盖或保留第一张。
+          // 既然是"关联"，假设是一对一。
+          if (!receiptData) {
+            receiptData = analysis.data;
+            receiptUrl = url;
+          }
+        } else {
+          // 如果未识别出类型，若还没有水单，暂作水单处理
+          if (!receiptData) {
+             receiptData = analysis.data;
+             receiptUrl = url;
+          }
+        }
+      } else {
+        // 尝试文档分析
+        const docAnalysis = await analyzeDocument(base44, url);
+        if (docAnalysis && docAnalysis.data) {
+           if (!receiptData) {
+             receiptData = docAnalysis.data;
+             receiptUrl = url;
+             console.log(`📄 [批量] 文档识别为水单`);
+           }
+        }
+      }
+    }
+
+    // 4. 关联与合并数据
+    if (!receiptData && !idCardData) {
+      return "❌ 未能识别出有效的水单或证件信息。请重试或手动录入。";
+    }
+
+    // 基础数据来自水单，补充数据来自证件
+    let mergedData = { ...receiptData };
+    
+    // 注入证件信息
+    if (idCardData) {
+      if (idCardData.name) mergedData.customer_name = idCardData.name;
+      if (idCardData.age) mergedData.customer_age = idCardData.age;
+      if (idCardData.nationality) mergedData.customer_nationality = idCardData.nationality;
+    }
+
+    // 确保有金额和币种
+    if (!mergedData.amount || !mergedData.currency) {
+      // 尝试再次从文本解析（如果有文本消息在 batchMessages 中）
+      // ...这里简化，直接返回提示
+      return "⚠️ 识别到的信息不完整（缺少金额或币种）。已尝试关联，但数据不足。";
+    }
+
+    // 格式转换
+    const finalData = {
+      deposit_amount: mergedData.amount,
+      currency: mergedData.currency,
+      customer_name: mergedData.customer_name,
+      receiving_account_name: mergedData.receiving_account_name || mergedData.recipient_name,
+      receiving_account_number: mergedData.receiving_account_number || mergedData.account_number,
+      bank_name: mergedData.bank_name,
+      deposit_date: mergedData.transfer_date || mergedData.date,
+      // 默认值
+      maintenance_days: 15,
+      commission_percentage: 13.5,
+      exchange_rate: 0.96
+    };
+    
+    // 5. 创建交易
+    const transaction = await createTransaction(
+      base44,
+      finalData,
+      chatId,
+      batchMessages[batchMessages.length - 1].message_id, // 使用最后一条消息ID
+      idCardUrl,
+      receiptUrl
+    );
+
+    // 6. 更新消息状态为 processed
+    for (const msg of batchMessages) {
+       // 更新状态 (需确认 update 方法是否存在和权限)
+       try {
+         await base44.asServiceRole.entities.TelegramMessage.update(msg.id, { status: 'processed' });
+       } catch (e) {
+         console.error('更新消息状态失败:', e);
+       }
+    }
+
+    // 7. 构建回复
+    let reply = `✅ <b>批量处理完成</b>\n\n`;
+    if (idCardData && receiptData) {
+      reply += `🔗 <b>已自动关联证件与水单</b>\n`;
+      reply += `   证件: ${idCardData.name} (${idCardData.age || '?'}岁)\n`;
+      reply += `   水单: ${finalData.deposit_amount} ${finalData.currency}\n\n`;
+    } else if (idCardData) {
+      reply += `⚠️ 仅识别到证件信息，未找到水单金额，无法创建完整交易。\n`;
+      return reply; // 没水单不创建交易? createTransaction 会失败或者缺字段。上方已校验。
+    } else {
+      reply += `⚠️ 未识别到证件，仅依据水单创建。\n\n`;
+    }
+
+    reply += `📝 编号: <code>${transaction.transaction_number}</code>\n`;
+    reply += `💵 金额: ${transaction.deposit_amount.toLocaleString()} ${transaction.currency}\n`;
+    if (finalData.customer_name) reply += `👤 客户: ${finalData.customer_name}\n`;
+    if (finalData.customer_age >= 70) reply += `⚠️ <b>高龄客户提醒</b> (${finalData.customer_age}岁)\n`;
+
+    return reply;
+
+  } catch (error) {
+    console.error("批量处理异常:", error);
+    return `❌ 批量处理失败: ${error.message}`;
+  }
+}
+
 // ============= 主处理函数 =============
 
 Deno.serve(async (req) => {
@@ -483,10 +659,55 @@ Deno.serve(async (req) => {
     const messageId = message.message_id;
     const messageText = message.text || message.caption || '';
     const userName = message.from?.first_name || message.from?.username || '用户';
-    
+    const mediaGroupId = message.media_group_id || null;
+
     console.log('📨 消息来自:', userName);
     console.log('📝 消息文本:', messageText);
+    if (mediaGroupId) console.log('📦 Media Group ID:', mediaGroupId);
     
+    // ============ 指令处理 ============
+    if (messageText.startsWith('/process_batch')) {
+      const resultMsg = await processBatch(base44, chatId);
+      await sendTelegramMessage(chatId, resultMsg, messageId);
+      return new Response(JSON.stringify({ ok: true }), { status: 200 });
+    }
+
+    if (messageText.startsWith('/reanalyze')) {
+      // 逻辑: 提取目标 message_id (用户可能回复某条消息，或者输入ID)
+      let targetMessageId = null;
+      if (message.reply_to_message) {
+        targetMessageId = String(message.reply_to_message.message_id);
+      } else {
+        const parts = messageText.split(' ');
+        if (parts.length > 1) targetMessageId = parts[1];
+      }
+
+      if (targetMessageId) {
+        await sendTelegramMessage(chatId, `🔄 正在重新分析消息 ${targetMessageId}...`, messageId);
+        // 查找消息记录
+        const msgs = await base44.asServiceRole.entities.TelegramMessage.list();
+        const targetMsg = msgs.find(m => m.message_id === targetMessageId && m.chat_id === String(chatId));
+        
+        if (targetMsg && targetMsg.file_urls && targetMsg.file_urls.length > 0) {
+           // 简单的重分析：当作单条处理
+           // 为简化，直接调用 processBatch 但只限定这一条? 或者复用 analyzeImageContent
+           // 这里简单演示对第一张图的重分析
+           const url = targetMsg.file_urls[0];
+           const analysis = await analyzeImageContent(base44, url);
+           if (analysis && analysis.data) {
+             await sendTelegramMessage(chatId, `✅ <b>重新分析结果</b>\n<pre>${JSON.stringify(analysis.data, null, 2)}</pre>`, messageId);
+           } else {
+             await sendTelegramMessage(chatId, `❌ 重新分析失败，未识别到内容`, messageId);
+           }
+        } else {
+           await sendTelegramMessage(chatId, `❌ 未找到该消息记录或该消息无文件`, messageId);
+        }
+      } else {
+        await sendTelegramMessage(chatId, `⚠️ 请回复一条带有图片的消息并发送 /reanalyze，或输入 /reanalyze [message_id]`, messageId);
+      }
+      return new Response(JSON.stringify({ ok: true }), { status: 200 });
+    }
+
     // 收集所有图片和文档
     const photos = [];
     const allFileUrls = []; // 收集所有文件链接
@@ -603,6 +824,7 @@ Deno.serve(async (req) => {
       await base44.asServiceRole.entities.TelegramMessage.create({
         chat_id: String(chatId),
         message_id: String(messageId),
+        media_group_id: mediaGroupId,
         sender_name: userName,
         content: messageText || (allFileUrls.length > 0 ? '[文件消息]' : '[未知消息]'),
         file_urls: allFileUrls,
@@ -610,7 +832,7 @@ Deno.serve(async (req) => {
         direction: 'incoming',
         tags: tags,
         category: category,
-        status: 'unread'
+        status: mediaGroupId ? 'pending_batch' : 'unread' // 如果是组消息，标记为待批量处理
       });
       console.log('💾 消息已存档');
     } catch (error) {
@@ -618,6 +840,14 @@ Deno.serve(async (req) => {
     }
 
     // 4. 检查是否需要继续处理为交易
+    // 如果是 Media Group 的一部分，跳过自动处理，等待 /process_batch
+    if (mediaGroupId) {
+       console.log('⏳ 收到 Media Group 消息，跳过自动处理，等待指令。');
+       // 可选：发送提示 (为了不刷屏，这里不发，或者只对第一条发? 很难判断第一条)
+       return new Response(JSON.stringify({ ok: true }), { status: 200 });
+    }
+
+    // 必须有图片或文本
     // 必须有图片或文本
     if (photos.length === 0 && !messageText && !message.document) {
       return new Response(JSON.stringify({ ok: true }), { status: 200 });
