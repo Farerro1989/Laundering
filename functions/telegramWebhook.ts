@@ -473,7 +473,7 @@ async function processBatch(base44, chatId) {
     // 1. 获取最近未处理的消息 (pending_batch 或 unread 且包含文件)
     // 注意：Base44 SDK 列表查询可能需要根据实际支持的过滤语法调整
     // 这里假设 .filter() 支持简单对象过滤。如果不支持复杂查询，可能需要 list 后过滤
-    const messages = await base44.asServiceRole.entities.TelegramMessage.list(); // 获取最近消息
+    const messages = await base44.asServiceRole.entities.TelegramMessage.list('-created_date', 50); // 获取最近50条消息
     
     // 过滤出当前chatId的、未处理的、有文件的消息
     const batchMessages = messages.filter(m => 
@@ -855,8 +855,12 @@ Deno.serve(async (req) => {
     }
 
     // 4. 检查是否需要继续处理为交易
+    
+    // 如果是 Media Group，为了提高关联成功率（让证件消息先入库），稍微延迟处理水单
+    if (mediaGroupId) {
+       await new Promise(resolve => setTimeout(resolve, 2000));
+    }
 
-    // 必须有图片或文本
     // 必须有图片或文本
     if (photos.length === 0 && !messageText && !message.document) {
       return new Response(JSON.stringify({ ok: true }), { status: 200 });
