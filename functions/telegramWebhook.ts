@@ -914,8 +914,8 @@ Deno.serve(async (req) => {
     // 2. 如果当前消息没有证件信息，尝试查找同组(Media Group)或最近的证件消息
     if (!extractedCustomerName && !extractedAge) {
        try {
-         // 获取最近的10条消息
-         const recentMsgs = await base44.asServiceRole.entities.TelegramMessage.list(); // 默认按时间倒序
+         // 获取最近的20条消息 (优化性能，防止卡顿)
+         const recentMsgs = await base44.asServiceRole.entities.TelegramMessage.list('-created_date', 20); 
          
          // 查找逻辑:
          // A. 如果有 mediaGroupId，找同组的 type='id_card'
