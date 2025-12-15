@@ -161,9 +161,10 @@ export default function Dashboard() {
       return acc;
     }, {});
 
-    // 总笔数也排除已退回的吗？通常"Total Accounts"指金额。
-    // 但用户说"不能记录进总账目"，为了一致性，这里只统计有效的交易笔数
-    const effectiveTransactions = allFilteredTransactions.filter(t => t.fund_status !== '已退回');
+    // 总笔数排除已退回和冻结（不能处理）的交易
+    const effectiveTransactions = allFilteredTransactions.filter(t => 
+      t.fund_status !== '已退回' && t.fund_status !== '冻结（不能处理）'
+    );
     const totalTransactions = effectiveTransactions.length;
 
     return {
