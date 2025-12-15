@@ -174,56 +174,13 @@ export default function Dashboard() {
 
   const calculateProfitMetrics = () => {
     const filteredTransactions = getFilteredTransactions();
-    // Completed includes "Completed" AND "Frozen (Cannot Process)" as per request
-    const completedTransactions = filteredTransactions.filter(t => 
-      t.fund_status === '已完成交易' || t.fund_status === '冻结（不能处理）'
-    );
 
+    // 1. Initialize Totals
     let totalCommission = 0;
     let totalTransferFee = 0;
     let totalExchangeRateProfit = 0;
-    let totalViolationPenalty = 0;
+    let totalViolationPenalty = 0; // Calculated from ALL valid transactions
     let completedCount = 0;
-
-    // 1. Calculate Actual Metrics from Completed/Frozen Transactions
-    for (const t of completedTransactions) {
-      const depositAmount = parseFloat(t.deposit_amount);
-      const exchangeRate = parseFloat(t.exchange_rate);
-
-      if (!depositAmount || !exchangeRate || exchangeRate === 0) {
-        continue;
-      }
-
-      const feeNative = parseFloat(t.transfer_fee) || 0;
-      const commNative = depositAmount * ((parseFloat(t.commission_percentage) || 0) / 100);
-      const netNative = depositAmount - feeNative - commNative;
-      let settlementUsdt = netNative / exchangeRate;
-
-      // If Frozen, Settlement is 0
-      if (t.fund_status === '冻结（不能处理）') {
-        settlementUsdt = 0;
-      }
-
-      const acceptanceUsdt = parseFloat(t.acceptance_usdt) || 0;
-
-      // Convert components to USDT for display
-      const commissionUsdt = commNative / exchangeRate;
-      const feeUsdt = feeNative / exchangeRate;
-
-      // If acceptance is 0, fallback to settlementUsdt (unless Frozen, where settlement is 0)
-      // For Frozen, if acceptance is 0, then actualAcceptance is 0.
-      const actualAcceptance = acceptanceUsdt > 0 ? acceptanceUsdt : settlementUsdt;
-
-      totalCommission += commissionUsdt;
-      totalTransferFee += feeUsdt;
-
-      // Exchange Profit = Acceptance - Initial USDT
-      const initialUsdt = depositAmount / exchangeRate;
-      const exchangeProfit = actualAcceptance - initialUsdt;
-      totalExchangeRateProfit += exchangeProfit; 
-
-      completedCount++;
-    }
 
     let estimatedCommission = 0;
     let estimatedTransferFee = 0;
@@ -232,17 +189,17 @@ export default function Dashboard() {
     let estimatedCount = 0;
     let totalFrozenFunds = 0;
 
-    // 2. Calculate Estimated Metrics and Total Violation Penalty (from ALL transactions)
     for (const t of filteredTransactions) {
-      // Exclude Returned funds
+      // Skip Returned funds completely
       if (t.fund_status === '已退回') continue;
-
-      // ACCUMULATE VIOLATION PENALTY FOR ALL VALID TRANSACTIONS
-      const violationPenalty = parseFloat(t.violation_penalty) || 0;
-      totalViolationPenalty += violationPenalty;
 
       const depositAmount = parseFloat(t.deposit_amount);
       const exchangeRate = parseFloat(t.exchange_rate);
+      const violationPenalty = parseFloat(t.violation_penalty) || 0;
+
+      // Accumulate Violation Penalty for ALL valid transactions (Actual Revenue)
+      totalViolationPenalty += violationPenalty;
+      estimatedViolationPenalty += violationPenalty;
 
       if (!depositAmount || !exchangeRate || exchangeRate === 0) {
         continue;
@@ -250,37 +207,55 @@ export default function Dashboard() {
 
       const feeNative = parseFloat(t.transfer_fee) || 0;
       const commNative = depositAmount * ((parseFloat(t.commission_percentage) || 0) / 100);
+
+      // USDT conversions
+      const commissionUsdt = commNative / exchangeRate;
+      const feeUsdt = feeNative / exchangeRate;
+      const initialUsdt = depositAmount / exchangeRate;
+
+      // Calculate Settlement (Theoretical)
       const netNative = depositAmount - feeNative - commNative;
       let settlementUsdt = netNative / exchangeRate;
-
       if (t.fund_status === '冻结（不能处理）') {
         settlementUsdt = 0;
       }
 
+      // --- ACTUAL PROFIT CALCULATION (Only for Completed) ---
+      if (t.fund_status === '已完成交易') {
+        const acceptanceUsdt = parseFloat(t.acceptance_usdt) || 0;
+
+        // Fallback logic for Acceptance: if 0, assume break-even on settlement (no exchange profit/loss)
+        // or strictly use 0? Usually completed means we have acceptance data.
+        // Using settlementUsdt as fallback avoids massive negative numbers if data missing.
+        const actualAcceptance = acceptanceUsdt > 0 ? acceptanceUsdt : settlementUsdt;
+
+        const exchangeProfit = actualAcceptance - initialUsdt;
+
+        totalCommission += commissionUsdt;
+        totalTransferFee += feeUsdt;
+        totalExchangeRateProfit += exchangeProfit;
+        completedCount++;
+      }
+
+      // --- ESTIMATED PROFIT CALCULATION (All Valid) ---
       const acceptanceUsdt = parseFloat(t.acceptance_usdt) || 0;
-
-      const commissionUsdt = commNative / exchangeRate;
-      const feeUsdt = feeNative / exchangeRate;
-
-      // For estimation
+      // Estimated Acceptance: If no actual data, assume theoretical return (Settlement + Fees + Comm)
+      // This implies Exchange Profit is 0 for estimation unless Actual Data exists
       const estimatedAcceptance = acceptanceUsdt > 0 ? acceptanceUsdt : (settlementUsdt + commissionUsdt + feeUsdt);
-
-      const initialUsdt = depositAmount / exchangeRate;
       const estimatedExchangeProfit = estimatedAcceptance - initialUsdt;
 
       estimatedCommission += commissionUsdt;
       estimatedTransferFee += feeUsdt;
       estimatedExchangeRateProfit += estimatedExchangeProfit;
-      estimatedViolationPenalty += violationPenalty;
       estimatedCount++;
 
-      // Frozen Funds
+      // --- FROZEN FUNDS ---
       if (t.fund_status === '冻结（不能处理）') {
-        const frozenUsdt = depositAmount / exchangeRate;
-        totalFrozenFunds += frozenUsdt;
+        totalFrozenFunds += initialUsdt;
       }
     }
 
+    // Total Actual Profit = Comm + Fee + ExchProfit (from Completed) + Penalty (from All Valid)
     const totalProfit = totalCommission + totalTransferFee + totalExchangeRateProfit + totalViolationPenalty;
 
     const estimatedProfit = estimatedCommission + estimatedTransferFee + estimatedExchangeRateProfit + estimatedViolationPenalty;
