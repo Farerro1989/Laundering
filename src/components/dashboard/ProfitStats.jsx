@@ -123,6 +123,41 @@ export default function ProfitStats({ profitMetrics, permissions, currentUser, t
           </div>
         </div>
 
+        {/* Violation Penalty & Frozen Funds Row */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+          <div className="bg-red-50/50 border border-red-100 rounded-lg p-4">
+            <div className="flex items-center gap-3 mb-2">
+              <div className="p-2 bg-red-100 rounded-lg">
+                <AlertCircle className="w-4 h-4 text-red-600" />
+              </div>
+              <span className="font-medium text-red-900">违规赔偿总额</span>
+            </div>
+            <div className="flex justify-between items-end">
+              <div>
+                <p className="text-2xl font-bold text-red-700">{formatCurrency(profitMetrics.violationPenalty)}</p>
+                <p className="text-xs text-red-600/70">实际赔偿 (已完成)</p>
+              </div>
+              <div className="text-right">
+                <p className="text-sm font-semibold text-red-600/80">{formatCurrency(profitMetrics.estimatedViolationPenalty)}</p>
+                <p className="text-[10px] text-red-600/60">预计总额 (所有交易)</p>
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-slate-50/50 border border-slate-200 rounded-lg p-4">
+            <div className="flex items-center gap-3 mb-2">
+              <div className="p-2 bg-slate-200 rounded-lg">
+                <AlertCircle className="w-4 h-4 text-slate-600" />
+              </div>
+              <span className="font-medium text-slate-900">冻结资金 (不能处理)</span>
+            </div>
+            <div>
+              <p className="text-2xl font-bold text-slate-700">{formatCurrency(profitMetrics.frozenFunds || 0)}</p>
+              <p className="text-xs text-slate-600/70">总冻结金额 (USDT估值)</p>
+            </div>
+          </div>
+        </div>
+
         {profitMetrics.completedCount === 0 && (
           <Alert className="mt-4 bg-blue-50 border-blue-200">
             <AlertCircle className="h-4 w-4 text-blue-600" />
