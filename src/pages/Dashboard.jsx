@@ -174,7 +174,10 @@ export default function Dashboard() {
 
   const calculateProfitMetrics = () => {
     const filteredTransactions = getFilteredTransactions();
-    const completedTransactions = filteredTransactions.filter(t => t.fund_status === '已完成交易');
+    // Completed includes "Completed" AND "Frozen (Cannot Process)" as per request
+    const completedTransactions = filteredTransactions.filter(t => 
+      t.fund_status === '已完成交易' || t.fund_status === '冻结（不能处理）'
+    );
 
     let totalCommission = 0;
     let totalTransferFee = 0;
@@ -182,72 +185,61 @@ export default function Dashboard() {
     let totalViolationPenalty = 0;
     let completedCount = 0;
 
+    // 1. Calculate Actual Metrics from Completed/Frozen Transactions
     for (const t of completedTransactions) {
       const depositAmount = parseFloat(t.deposit_amount);
       const exchangeRate = parseFloat(t.exchange_rate);
-      
+
       if (!depositAmount || !exchangeRate || exchangeRate === 0) {
         continue;
       }
 
-      // New Logic:
-      // 1. Fee (Native) = 25 (or t.transfer_fee)
-      // 2. Comm (Native) = Deposit * %
-      // 3. Net (Native) = Deposit - Fee - Comm
-      // 4. Settlement (USDT) = Net / Rate
-      // 5. Acceptance (USDT) = Manual Input
-      // 6. Profit = Acceptance - Settlement
-
       const feeNative = parseFloat(t.transfer_fee) || 0;
       const commNative = depositAmount * ((parseFloat(t.commission_percentage) || 0) / 100);
       const netNative = depositAmount - feeNative - commNative;
-      const settlementUsdt = netNative / exchangeRate;
-      
-      const acceptanceUsdt = parseFloat(t.acceptance_usdt) || 0;
-      const violationPenalty = parseFloat(t.violation_penalty) || 0;
+      let settlementUsdt = netNative / exchangeRate;
 
-      // To calculate components in USDT for display:
+      // If Frozen, Settlement is 0
+      if (t.fund_status === '冻结（不能处理）') {
+        settlementUsdt = 0;
+      }
+
+      const acceptanceUsdt = parseFloat(t.acceptance_usdt) || 0;
+
+      // Convert components to USDT for display
       const commissionUsdt = commNative / exchangeRate;
       const feeUsdt = feeNative / exchangeRate;
 
-      // If acceptance is 0 (not entered), assume break-even (profit = commission + fee)
-      // i.e. effectively Acceptance = Settlement + Comm + Fee? No.
-      // If not entered, we can't calculate real profit. We will use 0 for acceptance.
-      // But to avoid massive negative numbers in "Actual Profit" if user hasn't entered data,
-      // we might want to use settlementUsdt as a fallback for Acceptance? 
-      // No, let's stick to strict logic. If no acceptance, then profit is negative (we paid client but got nothing?). 
-      // Wait, usually "Completed" means we have the money.
-      // Let's use settlementUsdt as fallback for Acceptance if 0, so profit is 0.
+      // If acceptance is 0, fallback to settlementUsdt (unless Frozen, where settlement is 0)
+      // For Frozen, if acceptance is 0, then actualAcceptance is 0.
       const actualAcceptance = acceptanceUsdt > 0 ? acceptanceUsdt : settlementUsdt;
-
-      // Profit = Acceptance - Settlement - Penalty
-      // (User formula said "Total Profit = Comm + Fee + ExchangeProfit", but ExchangeProfit = Acceptance - Settlement)
-      // We will use Acceptance - Settlement as the Total Profit because that is the physical money remaining.
-      const totalTradeProfit = actualAcceptance - settlementUsdt - violationPenalty;
 
       totalCommission += commissionUsdt;
       totalTransferFee += feeUsdt;
+
       // Exchange Profit = Acceptance - Initial USDT
       const initialUsdt = depositAmount / exchangeRate;
       const exchangeProfit = actualAcceptance - initialUsdt;
       totalExchangeRateProfit += exchangeProfit; 
-      
-      totalViolationPenalty += violationPenalty;
+
       completedCount++;
     }
-
-    const totalProfit = totalCommission + totalTransferFee + totalExchangeRateProfit - totalViolationPenalty;
 
     let estimatedCommission = 0;
     let estimatedTransferFee = 0;
     let estimatedExchangeRateProfit = 0;
     let estimatedViolationPenalty = 0;
     let estimatedCount = 0;
-    let totalFrozenFunds = 0; // 新增：冻结资金总额
+    let totalFrozenFunds = 0;
 
+    // 2. Calculate Estimated Metrics and Total Violation Penalty (from ALL transactions)
     for (const t of filteredTransactions) {
-      // 已退回的资金不计入预估盈利
+      // Exclude Returned funds
       if (t.fund_status === '已退回') continue;
+
+      // ACCUMULATE VIOLATION PENALTY FOR ALL VALID TRANSACTIONS
+      const violationPenalty = parseFloat(t.violation_penalty) || 0;
+      totalViolationPenalty += violationPenalty;
 
       const depositAmount = parseFloat(t.deposit_amount);
       const exchangeRate = parseFloat(t.exchange_rate);
@@ -259,26 +251,20 @@ export default function Dashboard() {
       const feeNative = parseFloat(t.transfer_fee) || 0;
       const commNative = depositAmount * ((parseFloat(t.commission_percentage) || 0) / 100);
       const netNative = depositAmount - feeNative - commNative;
-      const settlementUsdt = netNative / exchangeRate;
-      
+      let settlementUsdt = netNative / exchangeRate;
+
+      if (t.fund_status === '冻结（不能处理）') {
+        settlementUsdt = 0;
+      }
+
       const acceptanceUsdt = parseFloat(t.acceptance_usdt) || 0;
-      const violationPenalty = parseFloat(t.violation_penalty) || 0;
 
       const commissionUsdt = commNative / exchangeRate;
       const feeUsdt = feeNative / exchangeRate;
 
-      // For estimation, if acceptance is 0, we assume we get the full value of deposit converted at market rate?
-      // Or we assume we get enough to cover settlement?
-      // Let's assume Acceptance = Settlement + Comm + Fee (i.e. the Spread is 0) if not entered.
-      // Or assume Acceptance = Deposit / ExchangeRate (Market)?
-      // Since we don't have a separate market rate, we can't estimate spread.
-      // So we assume Spread is 0.
-      // Thus Acceptance = Settlement + Comm + Fee.
-      // So Profit = Comm + Fee.
-      
+      // For estimation
       const estimatedAcceptance = acceptanceUsdt > 0 ? acceptanceUsdt : (settlementUsdt + commissionUsdt + feeUsdt);
-      
-      // Exchange Profit = Acceptance - Initial USDT
+
       const initialUsdt = depositAmount / exchangeRate;
       const estimatedExchangeProfit = estimatedAcceptance - initialUsdt;
 
@@ -287,14 +273,15 @@ export default function Dashboard() {
       estimatedExchangeRateProfit += estimatedExchangeProfit;
       estimatedViolationPenalty += violationPenalty;
       estimatedCount++;
-      
-      // 统计冻结资金 (冻结（不能处理）)
+
+      // Frozen Funds
       if (t.fund_status === '冻结（不能处理）') {
-        // 计算冻结资金的USDT价值 (Deposit / Rate)
         const frozenUsdt = depositAmount / exchangeRate;
         totalFrozenFunds += frozenUsdt;
       }
     }
+
+    const totalProfit = totalCommission + totalTransferFee + totalExchangeRateProfit - totalViolationPenalty;
 
     const estimatedProfit = estimatedCommission + estimatedTransferFee + estimatedExchangeRateProfit - estimatedViolationPenalty;
 
