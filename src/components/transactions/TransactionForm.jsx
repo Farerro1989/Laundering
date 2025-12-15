@@ -103,11 +103,23 @@ export default function TransactionForm({ transaction, initialTransferInfo = "",
     const netNative = deposit - fee - commAmount;
     const settlementUsdt = rate > 0 ? (netNative / rate) : 0;
 
-    // 如果资金状态是"冻结（不能处理）"，则不需要结算，结算金额设为0
-    const finalSettlementUsdt = formData.fund_status === "冻结（不能处理）" ? 0 : settlementUsdt;
+    // 处理特殊状态
+    let finalSettlementUsdt = settlementUsdt;
+    let finalCommission = parseFloat(formData.commission_percentage);
+    let finalFee = parseFloat(formData.transfer_fee);
+
+    if (formData.fund_status === "冻结（不能处理）") {
+      finalSettlementUsdt = 0;
+    } else if (formData.fund_status === "已退回") {
+      finalSettlementUsdt = 0;
+      finalCommission = 0;
+      finalFee = 0;
+    }
 
     const dataWithMaintenance = {
       ...formData,
+      commission_percentage: finalCommission,
+      transfer_fee: finalFee,
       maintenance_end_date: format(maintenanceEndDate, "yyyy-MM-dd"),
       settlement_usdt: parseFloat(finalSettlementUsdt.toFixed(2))
     };
