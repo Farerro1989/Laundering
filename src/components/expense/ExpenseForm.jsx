@@ -18,7 +18,7 @@ export default function ExpenseForm({ expense, categories, onSubmit, onCancel })
     quantity: 1,
     amount: 0,
     currency: "USD美元",
-    exchange_rate: 1.0,
+    exchange_rate: "",
     usdt_amount: 0,
     category: "",
     expense_date: format(new Date(), "yyyy-MM-dd"),
@@ -49,15 +49,12 @@ export default function ExpenseForm({ expense, categories, onSubmit, onCancel })
       }
     } catch (error) {
       console.error('获取汇率失败:', error);
-      const fallbackRates = { 'EUR欧元': 1.1, 'USD美元': 1.0, 'MYR马币': 0.22 };
-      const rate = fallbackRates[formData.currency] || 1.0;
-      const baseUsdt = formData.amount * rate * (formData.quantity || 1);
-      const finalUsdt = baseUsdt * 1.01;
-      
+      // No fallback, leave as is or set to empty
+      // User requested default empty
       setFormData(prev => ({
         ...prev,
-        exchange_rate: rate,
-        usdt_amount: finalUsdt
+        exchange_rate: "",
+        usdt_amount: 0
       }));
     }
     setLoadingRate(false);
@@ -161,9 +158,10 @@ export default function ExpenseForm({ expense, categories, onSubmit, onCancel })
               <Label>汇率（自动获取）</Label>
               <div className="flex gap-2">
                 <Input
-                  value={formData.exchange_rate?.toFixed(4) || '0.0000'}
+                  value={formData.exchange_rate ? Number(formData.exchange_rate).toFixed(4) : ''}
                   readOnly
                   className="bg-slate-50"
+                  placeholder="未获取"
                 />
                 <Button 
                   type="button" 

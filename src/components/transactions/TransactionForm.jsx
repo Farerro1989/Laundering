@@ -35,7 +35,7 @@ export default function TransactionForm({ transaction, initialTransferInfo = "",
     remittance_count: 1,
     deposit_date: format(new Date(), "yyyy-MM-dd"),
     maintenance_days: 15,
-    exchange_rate: 0.96,
+    exchange_rate: "",
     commission_percentage: 13.5,
     calculation_mode: "进算",
     transfer_fee: 25,
@@ -151,14 +151,15 @@ export default function TransactionForm({ transaction, initialTransferInfo = "",
   const handleCurrencyChange = async (value) => {
     handleChange('currency', value);
     if (!value) {
-      handleChange('exchange_rate', 0.96);
+      handleChange('exchange_rate', "");
       return;
     }
 
     const currencyCode = value.substring(0, 3);
     
     if (currencyCode === 'USD') {
-      handleChange('exchange_rate', 0.96);
+      // User requested empty default for all
+      handleChange('exchange_rate', "");
       return;
     }
 
@@ -168,12 +169,12 @@ export default function TransactionForm({ transaction, initialTransferInfo = "",
       if (response.data && response.data.rate) {
         handleChange('exchange_rate', parseFloat((response.data.rate * 0.97).toFixed(5)));
       } else {
-        console.warn(`未获取到 ${currencyCode} 汇率，使用默认值`);
-        handleChange('exchange_rate', 0.96);
+        console.warn(`未获取到 ${currencyCode} 汇率`);
+        handleChange('exchange_rate', "");
       }
     } catch (error) {
       console.error("获取汇率失败:", error);
-      handleChange('exchange_rate', 0.96);
+      handleChange('exchange_rate', "");
     } finally {
       setIsFetchingRate(false);
     }
@@ -486,7 +487,7 @@ ${transferInfo}
                     type="number"
                     step="0.00001"
                     value={formData.exchange_rate}
-                    onChange={(e) => handleChange('exchange_rate', parseFloat(e.target.value) || 0)}
+                    onChange={(e) => handleChange('exchange_rate', e.target.value)}
                     required
                     className="bg-white/80"
                   />
