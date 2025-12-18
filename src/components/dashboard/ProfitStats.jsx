@@ -1,7 +1,13 @@
 import React from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Coins, Calculator, TrendingUp, Target, AlertCircle } from "lucide-react";
+import { Coins, Calculator, TrendingUp, Target, AlertCircle, Info } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 export default function ProfitStats({ profitMetrics, permissions, currentUser, timeFilterLabel }) {
   const canViewCommission = permissions.can_view_commission_stats || currentUser?.role === 'admin';
