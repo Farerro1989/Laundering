@@ -43,7 +43,10 @@ export default function ProfitStats({ profitMetrics, permissions, currentUser, t
         {/* Main Summary Cards */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
           {/* Actual Profit */}
-          <div className="bg-gradient-to-br from-purple-50 to-violet-50 border border-purple-200 rounded-xl p-6 shadow-lg relative overflow-hidden group hover:shadow-xl transition-all">
+          <div 
+            className="bg-gradient-to-br from-purple-50 to-violet-50 border border-purple-200 rounded-xl p-6 shadow-lg relative overflow-hidden group hover:shadow-xl transition-all cursor-pointer"
+            onClick={() => navigateToDetails('profit')}
+          >
             <div className="relative z-10">
               <div className="flex items-center gap-2 mb-1">
                 <p className="text-sm font-medium text-purple-900">实际盈利 (已完成)</p>
