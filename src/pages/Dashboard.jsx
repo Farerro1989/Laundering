@@ -478,6 +478,11 @@ export default function Dashboard() {
               permissions={permissions} 
               currentUser={currentUser}
               timeFilterLabel={getTimeFilterLabel()}
+              filterParams={{
+                timeFilter,
+                year: selectedYear,
+                quarter: selectedQuarter
+              }}
             />
             <ProfitReportTable transactions={transactions} />
             <ProfitVisual profitMetrics={profitMetrics} />

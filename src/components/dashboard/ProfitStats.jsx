@@ -1,6 +1,7 @@
 import React from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Coins, Calculator, TrendingUp, Target, AlertCircle, Info } from "lucide-react";
+import { Coins, Calculator, TrendingUp, Target, AlertCircle, Info, ChevronRight } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import {
   Tooltip,
@@ -9,7 +10,8 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 
-export default function ProfitStats({ profitMetrics, permissions, currentUser, timeFilterLabel }) {
+export default function ProfitStats({ profitMetrics, permissions, currentUser, timeFilterLabel, filterParams }) {
+  const navigate = useNavigate();
   const canViewCommission = permissions.can_view_commission_stats || currentUser?.role === 'admin';
 
   const formatCurrency = (val) => {
@@ -17,6 +19,16 @@ export default function ProfitStats({ profitMetrics, permissions, currentUser, t
       minimumFractionDigits: 2, 
       maximumFractionDigits: 2 
     });
+  };
+
+  const navigateToDetails = (type) => {
+    const params = new URLSearchParams({
+      type,
+      timeFilter: filterParams?.timeFilter || 'all',
+      year: filterParams?.year || '',
+      quarter: filterParams?.quarter || ''
+    });
+    navigate(`/ProfitDetails?${params.toString()}`);
   };
 
   return (
@@ -42,27 +54,42 @@ export default function ProfitStats({ profitMetrics, permissions, currentUser, t
                     </TooltipTrigger>
                     <TooltipContent className="bg-white/95 backdrop-blur border-purple-200 text-slate-800 p-4 shadow-xl max-w-xs">
                       <div className="space-y-2">
-                        <p className="font-bold border-b border-purple-100 pb-2 mb-2">计算公式明细</p>
-                        <div className="flex justify-between text-xs">
-                          <span>佣金 (已完成):</span>
+                        <p className="font-bold border-b border-purple-100 pb-2 mb-2">计算公式明细 (点击查看详情)</p>
+                        <div 
+                          className="flex justify-between text-xs cursor-pointer hover:bg-purple-50 p-1 rounded transition-colors"
+                          onClick={() => navigateToDetails('commission')}
+                        >
+                          <span className="flex items-center gap-1">佣金 (已完成) <ChevronRight className="w-3 h-3"/></span>
                           <span className="font-mono text-green-600">+{formatCurrency(profitMetrics.commission)}</span>
                         </div>
-                        <div className="flex justify-between text-xs">
-                          <span>手续费 (已完成):</span>
+                        <div 
+                          className="flex justify-between text-xs cursor-pointer hover:bg-purple-50 p-1 rounded transition-colors"
+                          onClick={() => navigateToDetails('fee')}
+                        >
+                          <span className="flex items-center gap-1">手续费 (已完成) <ChevronRight className="w-3 h-3"/></span>
                           <span className="font-mono text-blue-600">+{formatCurrency(profitMetrics.transferFee)}</span>
                         </div>
-                        <div className="flex justify-between text-xs">
-                          <span>汇率盈亏 (已完成):</span>
+                        <div 
+                          className="flex justify-between text-xs cursor-pointer hover:bg-purple-50 p-1 rounded transition-colors"
+                          onClick={() => navigateToDetails('exchange')}
+                        >
+                          <span className="flex items-center gap-1">汇率盈亏 (已完成) <ChevronRight className="w-3 h-3"/></span>
                           <span className={`font-mono ${profitMetrics.exchangeRateProfit >= 0 ? 'text-green-600' : 'text-red-500'}`}>
                             {profitMetrics.exchangeRateProfit >= 0 ? '+' : ''}{formatCurrency(profitMetrics.exchangeRateProfit)}
                           </span>
                         </div>
-                        <div className="flex justify-between text-xs">
-                          <span>违规罚金 (全部):</span>
+                        <div 
+                          className="flex justify-between text-xs cursor-pointer hover:bg-purple-50 p-1 rounded transition-colors"
+                          onClick={() => navigateToDetails('penalty')}
+                        >
+                          <span className="flex items-center gap-1">违规罚金 (全部) <ChevronRight className="w-3 h-3"/></span>
                           <span className="font-mono text-red-600">+{formatCurrency(profitMetrics.violationPenalty)}</span>
                         </div>
-                        <div className="border-t border-purple-100 pt-2 mt-2 flex justify-between font-bold text-sm">
-                          <span>总计:</span>
+                        <div 
+                          className="border-t border-purple-100 pt-2 mt-2 flex justify-between font-bold text-sm cursor-pointer hover:bg-purple-50 p-1 rounded transition-colors"
+                          onClick={() => navigateToDetails('profit')}
+                        >
+                          <span className="flex items-center gap-1">总计 <ChevronRight className="w-3 h-3"/></span>
                           <span className="text-purple-700">{formatCurrency(profitMetrics.profit)}</span>
                         </div>
                       </div>

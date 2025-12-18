@@ -11,6 +11,7 @@ import ExpenseCategories from './pages/ExpenseCategories';
 import ExpenseReports from './pages/ExpenseReports';
 import AccountDetail from './pages/AccountDetail';
 import TelegramMessages from './pages/TelegramMessages';
+import ProfitDetails from './pages/ProfitDetails';
 import __Layout from './Layout.jsx';
 
 
@@ -28,6 +29,7 @@ export const PAGES = {
     "ExpenseReports": ExpenseReports,
     "AccountDetail": AccountDetail,
     "TelegramMessages": TelegramMessages,
+    "ProfitDetails": ProfitDetails,
 }
 
 export const pagesConfig = {
