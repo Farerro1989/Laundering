@@ -71,7 +71,7 @@ export default function ProfitDetails() {
     // 2. Type Filter Logic
     return filtered.filter(t => {
       const isCompleted = t.fund_status === '已完成交易';
-      const isFrozen = t.fund_status === '冻结（不能处理）';
+      const isFrozen = t.fund_status === '冻结（不能处理）' || t.fund_status === '冻结（正在处理）';
       const isReturned = t.fund_status === '已退回';
       const hasPenalty = (parseFloat(t.violation_penalty) || 0) > 0;
 
@@ -162,7 +162,7 @@ export default function ProfitDetails() {
       if (type === 'fee') return acc + data.feeUsdt;
       if (type === 'exchange') return acc + data.exchangeProfit;
       if (type === 'penalty') return acc + data.penaltyUsdt;
-      if (type === 'frozen') return acc + (t.fund_status === '冻结（不能处理）' ? data.initialUsdt : 0);
+      if (type === 'frozen') return acc + ((t.fund_status === '冻结（不能处理）' || t.fund_status === '冻结（正在处理）') ? data.initialUsdt : 0);
       return acc + data.totalProfit;
     }, 0);
   }, [filteredTransactions, type]);
