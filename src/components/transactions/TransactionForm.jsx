@@ -554,7 +554,14 @@ ${transferInfo}
 
               <div className="space-y-2">
                 <Label>资金状态</Label>
-                <Select value={formData.fund_status} onValueChange={(value) => handleChange('fund_status', value)}>
+                <Select value={formData.fund_status} onValueChange={(value) => {
+                  handleChange('fund_status', value);
+                  // 自动化：已退回或冻结（不能处理）时，清零佣金和手续费
+                  if (value === '已退回' || value === '冻结（不能处理）') {
+                    handleChange('commission_percentage', 0);
+                    handleChange('transfer_fee', 0);
+                  }
+                }}>
                   <SelectTrigger className="bg-white/80">
                     <SelectValue />
                   </SelectTrigger>
