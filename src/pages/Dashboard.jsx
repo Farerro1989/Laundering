@@ -149,8 +149,8 @@ export default function Dashboard() {
     const allFilteredTransactions = getFilteredTransactions();
     
     const depositsByCurrency = allFilteredTransactions.reduce((acc, t) => {
-      // 已退回的资金和冻结（不能处理）不计入总账目
-      if (t.fund_status === '已退回' || t.fund_status === '冻结（不能处理）') return acc;
+      // 已退回、冻结（不能处理）、冻结（正在处理）不计入总账目
+      if (t.fund_status === '已退回' || t.fund_status === '冻结（不能处理）' || t.fund_status === '冻结（正在处理）') return acc;
 
       const currencyCode = t.currency?.replace(/[\u4e00-\u9fa5]/g, '') || 'OTHER';
       if (!acc[currencyCode]) {
@@ -161,9 +161,9 @@ export default function Dashboard() {
       return acc;
     }, {});
 
-    // 总笔数排除已退回和冻结（不能处理）的交易
+    // 总笔数排除已退回、冻结（不能处理）、冻结（正在处理）的交易
     const effectiveTransactions = allFilteredTransactions.filter(t => 
-      t.fund_status !== '已退回' && t.fund_status !== '冻结（不能处理）'
+      t.fund_status !== '已退回' && t.fund_status !== '冻结（不能处理）' && t.fund_status !== '冻结（正在处理）'
     );
     const totalTransactions = effectiveTransactions.length;
 
@@ -195,19 +195,27 @@ export default function Dashboard() {
       totalViolationPenalty += violationPenalty;
       estimatedViolationPenalty += violationPenalty;
 
-      // Handle Returned - Skip everything else
-      if (t.fund_status === '已退回') continue;
-
+      // Handle special statuses that should be excluded from profit calculations
       const depositAmount = parseFloat(t.deposit_amount);
       const exchangeRate = parseFloat(t.exchange_rate);
 
-      // Handle Frozen (Cannot Process)
-      // Logic: Track Frozen Funds, but skip profit/commission/fee calculations
+      // Returned: Skip completely
+      if (t.fund_status === '已退回') continue;
+
+      // Frozen (Cannot Process): Track funds but skip profit
       if (t.fund_status === '冻结（不能处理）') {
         if (depositAmount && exchangeRate && exchangeRate !== 0) {
           totalFrozenFunds += depositAmount / exchangeRate;
         }
         continue; 
+      }
+
+      // Frozen (Processing): Skip profit calculations
+      if (t.fund_status === '冻结（正在处理）') {
+        if (depositAmount && exchangeRate && exchangeRate !== 0) {
+          totalFrozenFunds += depositAmount / exchangeRate;
+        }
+        continue;
       }
 
       if (!depositAmount || !exchangeRate || exchangeRate === 0) {
@@ -343,8 +351,8 @@ export default function Dashboard() {
   const stats = {};
 
   filteredTxns.forEach(t => {
-    // 已退回的资金和冻结（不能处理）不计入账户统计
-    if (t.fund_status === '已退回' || t.fund_status === '冻结（不能处理）') return;
+    // 已退回、冻结（不能处理）、冻结（正在处理）不计入账户统计
+    if (t.fund_status === '已退回' || t.fund_status === '冻结（不能处理）' || t.fund_status === '冻结（正在处理）') return;
 
     const company = t.receiving_account_name || '未知公司';
       const currency = t.currency?.substring(0, 3) || 'XXX';

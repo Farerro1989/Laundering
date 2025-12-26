@@ -1,35 +1,37 @@
-import Dashboard from './pages/Dashboard';
-import Transactions from './pages/Transactions';
+import AccountDetail from './pages/AccountDetail';
 import Analytics from './pages/Analytics';
-import TelegramSetup from './pages/TelegramSetup';
-import UserManagement from './pages/UserManagement';
+import Dashboard from './pages/Dashboard';
 import DataBackup from './pages/DataBackup';
-import SystemSelector from './pages/SystemSelector';
+import ExpenseCategories from './pages/ExpenseCategories';
 import ExpenseDashboard from './pages/ExpenseDashboard';
 import ExpenseList from './pages/ExpenseList';
-import ExpenseCategories from './pages/ExpenseCategories';
 import ExpenseReports from './pages/ExpenseReports';
-import AccountDetail from './pages/AccountDetail';
-import TelegramMessages from './pages/TelegramMessages';
+import Home from './pages/Home';
 import ProfitDetails from './pages/ProfitDetails';
+import SystemSelector from './pages/SystemSelector';
+import TelegramMessages from './pages/TelegramMessages';
+import TelegramSetup from './pages/TelegramSetup';
+import Transactions from './pages/Transactions';
+import UserManagement from './pages/UserManagement';
 import __Layout from './Layout.jsx';
 
 
 export const PAGES = {
-    "Dashboard": Dashboard,
-    "Transactions": Transactions,
+    "AccountDetail": AccountDetail,
     "Analytics": Analytics,
-    "TelegramSetup": TelegramSetup,
-    "UserManagement": UserManagement,
+    "Dashboard": Dashboard,
     "DataBackup": DataBackup,
-    "SystemSelector": SystemSelector,
+    "ExpenseCategories": ExpenseCategories,
     "ExpenseDashboard": ExpenseDashboard,
     "ExpenseList": ExpenseList,
-    "ExpenseCategories": ExpenseCategories,
     "ExpenseReports": ExpenseReports,
-    "AccountDetail": AccountDetail,
-    "TelegramMessages": TelegramMessages,
+    "Home": Home,
     "ProfitDetails": ProfitDetails,
+    "SystemSelector": SystemSelector,
+    "TelegramMessages": TelegramMessages,
+    "TelegramSetup": TelegramSetup,
+    "Transactions": Transactions,
+    "UserManagement": UserManagement,
 }
 
 export const pagesConfig = {
