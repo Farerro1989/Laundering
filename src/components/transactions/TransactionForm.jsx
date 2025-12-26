@@ -130,10 +130,16 @@ export default function TransactionForm({ transaction, initialTransferInfo = "",
   };
 
   const handleChange = (field, value) => {
-    setFormData(prev => ({
-      ...prev,
-      [field]: value
-    }));
+    setFormData(prev => {
+      const updated = { ...prev, [field]: value };
+      
+      // 自动计算承兑回USDT：对USD币种，1.02美金=1USDT
+      if ((field === 'deposit_amount' || field === 'currency') && updated.currency === 'USD美元' && updated.deposit_amount > 0) {
+        updated.acceptance_usdt = parseFloat((updated.deposit_amount / 1.02).toFixed(2));
+      }
+      
+      return updated;
+    });
   };
 
   const handleCompanyChange = (company) => {
