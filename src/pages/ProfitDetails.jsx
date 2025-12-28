@@ -4,14 +4,27 @@ import { Transaction } from "@/entities/Transaction";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, Download, Filter } from "lucide-react";
+import { ArrowLeft, Download, Filter, Edit, Trash2 } from "lucide-react";
 import { startOfDay, endOfDay, startOfMonth, endOfMonth, startOfYear, endOfYear, isValid, isWithinInterval } from "date-fns";
+import TransactionForm from "../components/transactions/TransactionForm";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 export default function ProfitDetails() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const [transactions, setTransactions] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [editingTransaction, setEditingTransaction] = useState(null);
+  const [deletingTransaction, setDeletingTransaction] = useState(null);
 
   const type = searchParams.get("type") || "profit"; // profit, commission, fee, exchange, penalty, frozen
   const timeFilter = searchParams.get("timeFilter") || "all";
@@ -155,6 +168,33 @@ export default function ProfitDetails() {
 
   const formatMoney = (val) => val?.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) || '0.00';
 
+  const handleEdit = (transaction) => {
+    setEditingTransaction(transaction);
+  };
+
+  const handleSaveEdit = async (updatedData) => {
+    try {
+      await Transaction.update(editingTransaction.id, updatedData);
+      setTransactions(prev => prev.map(t => t.id === editingTransaction.id ? { ...t, ...updatedData } : t));
+      setEditingTransaction(null);
+    } catch (error) {
+      console.error("更新交易失败:", error);
+      alert("更新失败，请重试");
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!deletingTransaction) return;
+    try {
+      await Transaction.delete(deletingTransaction.id);
+      setTransactions(prev => prev.filter(t => t.id !== deletingTransaction.id));
+      setDeletingTransaction(null);
+    } catch (error) {
+      console.error("删除交易失败:", error);
+      alert("删除失败，请重试");
+    }
+  };
+
   const totalSum = React.useMemo(() => {
     return filteredTransactions.reduce((acc, t) => {
       const data = calculateRowData(t);
@@ -166,6 +206,20 @@ export default function ProfitDetails() {
       return acc + data.totalProfit;
     }, 0);
   }, [filteredTransactions, type]);
+
+  if (editingTransaction) {
+    return (
+      <div className="min-h-screen bg-slate-50 p-6">
+        <div className="max-w-5xl mx-auto">
+          <TransactionForm
+            transaction={editingTransaction}
+            onSubmit={handleSaveEdit}
+            onCancel={() => setEditingTransaction(null)}
+          />
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-slate-50 p-6">
@@ -204,15 +258,16 @@ export default function ProfitDetails() {
                     <TableHead>客户/单号</TableHead>
                     <TableHead>状态</TableHead>
                     <TableHead className="text-right">查收金额</TableHead>
-                    
+
                     {(type === 'profit' || type === 'commission') && <TableHead className="text-right">佣金(USDT)</TableHead>}
                     {(type === 'profit' || type === 'fee') && <TableHead className="text-right">手续费(USDT)</TableHead>}
                     {(type === 'profit' || type === 'exchange') && <TableHead className="text-right">汇率盈亏(USDT)</TableHead>}
                     {(type === 'profit' || type === 'penalty') && <TableHead className="text-right">罚金(USDT)</TableHead>}
-                    
+
                     {type === 'frozen' && <TableHead className="text-right">冻结金额(USDT)</TableHead>}
-                    
+
                     {(type === 'profit') && <TableHead className="text-right font-bold">总盈利</TableHead>}
+                    <TableHead className="text-right">操作</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -293,16 +348,68 @@ export default function ProfitDetails() {
                               {formatMoney(data.totalProfit)}
                             </TableCell>
                           )}
-                        </TableRow>
-                      );
-                    })
-                  )}
-                </TableBody>
-              </Table>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-    </div>
-  );
-}
+
+                          <TableCell className="text-right">
+                            <div className="flex justify-end gap-2">
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => handleEdit(t)}
+                                className="h-8 w-8 text-blue-600 hover:text-blue-700 hover:bg-blue-50"
+                              >
+                                <Edit className="w-4 h-4" />
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => setDeletingTransaction(t)}
+                                className="h-8 w-8 text-red-600 hover:text-red-700 hover:bg-red-50"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </Button>
+                            </div>
+                          </TableCell>
+                          </TableRow>
+                          );
+                          })
+                          )}
+                          </TableBody>
+                          </Table>
+                          </div>
+                          </CardContent>
+                          </Card>
+                          </div>
+
+                          {/* 删除确认对话框 */}
+                          <AlertDialog open={!!deletingTransaction} onOpenChange={() => setDeletingTransaction(null)}>
+                          <AlertDialogContent>
+                          <AlertDialogHeader>
+                          <AlertDialogTitle>确认删除交易</AlertDialogTitle>
+                          <AlertDialogDescription>
+                          您确定要删除此交易吗？此操作无法撤销。
+                          {deletingTransaction && (
+                          <div className="mt-3 p-3 bg-slate-100 rounded-lg">
+                          <p className="text-sm text-slate-900">
+                          <strong>客户：</strong>{deletingTransaction.customer_name}
+                          </p>
+                          <p className="text-sm text-slate-900">
+                          <strong>单号：</strong>{deletingTransaction.transaction_number}
+                          </p>
+                          <p className="text-sm text-slate-900">
+                          <strong>金额：</strong>{formatMoney(deletingTransaction.deposit_amount)} {deletingTransaction.currency?.substring(0, 3)}
+                          </p>
+                          </div>
+                          )}
+                          </AlertDialogDescription>
+                          </AlertDialogHeader>
+                          <AlertDialogFooter>
+                          <AlertDialogCancel>取消</AlertDialogCancel>
+                          <AlertDialogAction onClick={handleDelete} className="bg-red-600 hover:bg-red-700">
+                          确认删除
+                          </AlertDialogAction>
+                          </AlertDialogFooter>
+                          </AlertDialogContent>
+                          </AlertDialog>
+                          </div>
+                          );
+                          }
